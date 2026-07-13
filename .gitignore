@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenv / uv
+.venv/
+.python-version
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Data / models / artifacts (kept out of git)
+data/
+!data/.gitkeep
+mlruns/
+*.log
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

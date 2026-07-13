@@ -1,0 +1,88 @@
+[project]
+name = "scholarrag"
+version = "0.1.0"
+description = "A production-style Retrieval-Augmented Generation platform with hybrid retrieval, reranking, evaluation, and observability."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "Julian" }]
+
+# Phase 0 keeps the core dependency set deliberately light so `make test` and CI
+# stay fast and hermetic. Heavier concerns (embeddings/torch, LangChain, Pinecone,
+# Celery, RAGAS, MLflow, ...) are added in their own phases via optional groups.
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "structlog>=24.4",
+    "numpy>=2.1",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+# Populated in later phases; declared now so the layering is visible.
+llm = ["anthropic>=0.40"]
+ingestion = []
+retrieval = []
+eval = []
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pre-commit>=4.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scholarrag"]
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
+ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+explicit_package_bases = true
+namespace_packages = true
+
+[[tool.mypy.overrides]]
+module = ["scholarrag.*"]
+disallow_untyped_defs = true
+
+# Optional third-party packages installed only in later phases / production.
+[[tool.mypy.overrides]]
+module = ["pinecone.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra -q"
+# Warnings are errors for our own code; framework migration warnings we don't
+# control are ignored explicitly so they don't mask real issues.
+filterwarnings = [
+    "error",
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
+]

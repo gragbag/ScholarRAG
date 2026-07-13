@@ -1,0 +1,92 @@
+# Local development stack for ScholarRAG.
+#
+# Pinecone is a managed cloud service, so it is NOT a container here — the app
+# falls back to the in-process LocalVectorStore unless PINECONE_API_KEY is set.
+#
+# Services: api, postgres, redis, langfuse (LLM tracing), mlflow (experiments).
+# The langfuse/mlflow images are sizeable; the first `make up` pulls them.
+#
+# The secrets below are throwaway LOCAL-DEV values, safe to commit. Never reuse
+# them anywhere real.
+
+name: scholarrag
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: scholarrag
+      POSTGRES_PASSWORD: scholarrag
+      POSTGRES_DB: scholarrag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scholarrag"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      # Optional: falls back to in-code defaults (LocalVectorStore, etc.) if the
+      # developer hasn't copied .env.example → .env yet.
+      - path: .env
+        required: false
+    environment:
+      # Point the app at the compose services (override .env's localhost DSNs).
+      POSTGRES_DSN: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  langfuse:
+    image: langfuse/langfuse:2
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://scholarrag:scholarrag@postgres:5432/langfuse
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: local-dev-nextauth-secret-change-me
+      SALT: local-dev-salt-change-me
+      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      TELEMETRY_ENABLED: "false"
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.19.0
+    command: >
+      mlflow server
+      --host 0.0.0.0 --port 5000
+      --backend-store-uri sqlite:////mlflow/mlflow.db
+      --artifacts-destination /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflowdata:/mlflow
+
+volumes:
+  pgdata:
+  mlflowdata:
