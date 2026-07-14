@@ -127,7 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except KeyError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Unknown corpus profile: {name}",
+                detail=f"Unknown corpus profile: {name}",
             ) from None
 
         return CorpusProfileResponse(

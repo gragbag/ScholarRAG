@@ -58,11 +58,14 @@ cp .env.example .env         # fill in ANTHROPIC_API_KEY when you reach Phase 2
 make install                 # create the venv and install deps (uv sync)
 make test                    # run the test suite (uses LocalVectorStore, no cloud)
 make lint                    # ruff + mypy
-make run                     # start the API locally (http://localhost:8000/docs)
+make run                     # start the API locally (http://localhost:8001/docs)
 make up                      # boot the full stack via docker-compose
 ```
 
-Health check: `curl localhost:8000/health` · Config: `curl localhost:8000/info`
+Health check: `curl localhost:8001/health` · Config: `curl localhost:8001/info`
+
+> Host ports are offset so ScholarRAG coexists with other local stacks: API
+> **8001**, MLflow **5001**, Langfuse **3001**, Postgres **5433**, Redis **6380**.
 
 ## Roadmap
 

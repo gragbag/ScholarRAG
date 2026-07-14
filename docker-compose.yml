@@ -6,6 +6,11 @@
 # Services: api, postgres, redis, langfuse (LLM tracing), mlflow (experiments).
 # The langfuse/mlflow images are sizeable; the first `make up` pulls them.
 #
+# HOST PORTS are offset from the defaults (api 8001, mlflow 5001, langfuse 3001,
+# postgres 5433, redis 6380) so ScholarRAG coexists with other local stacks that
+# use the standard ports. Container-internal ports are unchanged, so services
+# still reach each other at postgres:5432 / redis:6379 on the compose network.
+#
 # The secrets below are throwaway LOCAL-DEV values, safe to commit. Never reuse
 # them anywhere real.
 
@@ -19,7 +24,7 @@ services:
       POSTGRES_PASSWORD: scholarrag
       POSTGRES_DB: scholarrag
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
@@ -32,7 +37,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -53,7 +58,7 @@ services:
       POSTGRES_DSN: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
       REDIS_URL: redis://redis:6379/0
     ports:
-      - "8000:8000"
+      - "8001:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,10 +71,10 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3001:3000"
     environment:
       DATABASE_URL: postgresql://scholarrag:scholarrag@postgres:5432/langfuse
-      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: http://localhost:3001
       NEXTAUTH_SECRET: local-dev-nextauth-secret-change-me
       SALT: local-dev-salt-change-me
       ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
@@ -83,7 +88,7 @@ services:
       --backend-store-uri sqlite:////mlflow/mlflow.db
       --artifacts-destination /mlflow/artifacts
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - mlflowdata:/mlflow
 

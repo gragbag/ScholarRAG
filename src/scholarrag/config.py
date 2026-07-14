@@ -70,8 +70,11 @@ class Settings(BaseSettings):
     pinecone_region: str = "us-east-1"
 
     # -- Infrastructure (Phase 1+) ------------------------------------------
-    postgres_dsn: str = "postgresql+psycopg://scholarrag:scholarrag@localhost:5432/scholarrag"
-    redis_url: str = "redis://localhost:6379/0"
+    # Host ports are offset (5433/6380) to coexist with other local stacks; see
+    # docker-compose.yml. Inside the compose network the api overrides these to
+    # the standard container ports (postgres:5432 / redis:6379).
+    postgres_dsn: str = "postgresql+psycopg://scholarrag:scholarrag@localhost:5433/scholarrag"
+    redis_url: str = "redis://localhost:6380/0"
 
     # -- Corpus --------------------------------------------------------------
     # Selects a profile in scholarrag.corpus (domain is swappable).

@@ -28,8 +28,8 @@ test: ## Run the test suite (LocalVectorStore; no cloud deps)
 
 check: lint test ## Everything CI runs
 
-run: ## Run the API locally with autoreload
-	uv run uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8000
+run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
+	uv run uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8001
 
 up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
 	docker compose up -d --build

@@ -18,6 +18,10 @@ dependencies = [
     "structlog>=24.4",
     "numpy>=2.1",
     "httpx>=0.28",
+    # Phase 1: relational metadata + full-text index, with versioned migrations.
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14",
+    "psycopg[binary]>=3.2",
 ]
 
 [project.optional-dependencies]
