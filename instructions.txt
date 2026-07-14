@@ -1,0 +1,267 @@
+1. Role & working style
+
+You're building this with me. Please:
+
+
+Work in the phases in Section 7. Finish and verify one before starting the next.
+End each phase by: running the app, running the tests, and giving me a short summary of what
+works, what's stubbed, and how to run it. Then commit with a clear message.
+Prefer boring, well-supported, free/open-source tools. Don't add a paid or always-on-cost
+dependency without asking me first. (Pinecone's free Starter tier is fine — see Section 8.)
+Write real tests as you go (pytest). Treat the evaluation harness (Phase 3) as a first-class
+feature, not an afterthought.
+Keep secrets out of the repo. All config via env vars with a committed .env.example.
+Record real measured numbers into docs/BENCHMARKS.md as you build (retrieval metrics,
+latency p50/p95, ingestion throughput, cost per query, before/after reranking). Note the
+baseline and method for each — I need these for my resume and they must be defensible.
+
+
+2. What we're building (one paragraph)
+
+A production-style Retrieval-Augmented Generation (RAG) platform. A user uploads a corpus of
+documents (default use case: scientific papers / research PDFs), asks natural-language
+questions, and gets grounded, cited answers. This is deliberately not a toy "chat with PDF":
+it implements robust retrieval (hybrid dense + lexical search with reranking and query
+rewriting), an automated evaluation harness wired into CI, LLM observability (tracing,
+token/cost, latency), experiment tracking for retrieval configs, guardrails, and a
+cloud-native deployment path. It runs locally via Docker Compose and can be deployed to a free
+host for a public demo. The document domain must be swappable via a corpus config module —
+default to research papers, but work for any PDF/markdown/text corpus.
+
+3. Non-negotiable requirements (the differentiators)
+
+Build all of these — they're what separate this from a beginner project:
+
+
+Async ingestion pipeline: upload → parse (PDF/markdown/text) → chunk (configurable) →
+embed → index. Run ingestion in background workers with retries, idempotency (by content
+hash), and a dead-letter queue. Track per-document ingestion status in Postgres.
+Hybrid retrieval: dense (vector) search via Pinecone + lexical (BM25) search, merged
+with Reciprocal Rank Fusion (RRF), then cross-encoder reranking of the top candidates.
+Default lexical side: Postgres full-text search (reuses Postgres, transparent, controllable).
+Alternative: Pinecone sparse-dense hybrid — note the tradeoff in docs/DESIGN.md.
+Query transformation: an LLM step that rewrites/expands the query (and optionally HyDE)
+before retrieval. Make it toggleable so its impact can be measured in eval.
+Grounded generation with citations: answers cite the source chunks used; responses stream.
+Evaluation harness: a golden Q/A set + retrieval metrics (recall@k, MRR, NDCG@k) + generation
+quality via RAGAS (faithfulness, answer relevancy, context precision/recall). Runnable as
+make eval, gated in CI so a regression fails the build, and logged to MLflow so I can
+compare retrieval configurations as experiments.
+LLM observability: full request tracing + token usage + cost + latency per query.
+Cost controls: a semantic cache (cache answers for semantically similar queries),
+model-tier selection (cheap model for query rewriting/classification, stronger model for final
+generation), and token/output limits.
+Guardrails: prompt-injection detection on input, PII detection/redaction on input/output,
+per-client rate limiting on the public API.
+Provider-agnostic LLM layer: swappable LLM/embedding provider via env var. Default to a
+hosted free/cheap tier (Gemini free tier or a cheap OpenAI model); keep local Ollama as
+an option. Never hard-code a provider.
+
+
+4. Tech stack (chosen to span ML + SWE; ask before changing)
+
+Bridges both ML and software engineering (call these out on the résumé):
+
+
+Language / API: Python 3.12, FastAPI (async), Pydantic v2, pydantic-settings.
+Orchestration: LangChain (RAG pipeline); LangGraph for the agentic loop (Phase 5).
+Vector DB: Pinecone (serverless, free Starter tier). Access it behind a small
+VectorStore interface (see Section 5) so tests/CI don't need live Pinecone credentials.
+Lexical search: Postgres full-text search for the BM25 side of hybrid retrieval.
+Embeddings: sentence-transformers (a BGE model) locally by default; API embeddings optional.
+(Built on PyTorch — a tool that reads as both ML and infra.)
+Reranker: a cross-encoder from sentence-transformers (e.g. bge-reranker / MS-MARCO MiniLM),
+run locally so it's free and controllable. (Pinecone has integrated reranking, but the free tier
+caps rerank requests — prefer the local cross-encoder; mention the tradeoff in docs.)
+LLM providers: provider-agnostic interface; hosted free/cheap default, Ollama optional.
+Relational DB: PostgreSQL — document/chunk metadata, ingestion status, chat sessions,
+eval runs, and full-text (BM25) index.
+Cache / broker: Redis — semantic cache + task broker.
+Background workers: Celery (or arq) for async ingestion; retries, idempotency, DLQ.
+Evaluation: RAGAS + custom retrieval metrics; golden set stored in the repo.
+Experiment tracking: MLflow — log each eval run (config + metrics) so retrieval variants
+can be compared as experiments. (Classic ML-Ops tool; bridges ML and engineering.)
+LLM observability: Langfuse (self-hosted via Docker, free) for tracing + token/cost.
+System metrics: Prometheus + Grafana for service-level metrics (most droppable if scope
+tightens — Langfuse + MLflow already cover a lot). Structured JSON logging with correlation IDs.
+Frontend: Streamlit (fast, free, HF-Spaces-friendly). Optional stretch: a minimal
+React/Next.js chat UI.
+Containerization: Docker + docker-compose (API, Postgres, Redis, Langfuse, MLflow).
+Orchestration (deploy): Kubernetes manifests + Helm chart; must run on kind/
+minikube. Include HPA autoscaling for API and workers.
+IaC: Terraform modules for the cloud path (managed Postgres/Redis + secrets for Pinecone).
+Modular and documented so it's demonstrable without a paid always-on cluster.
+CI/CD: GitHub Actions — lint (ruff), type-check (mypy), tests (pytest), build/push
+images, run the eval gate, security scan (trivy + bandit). Optional deploy job.
+Testing: pytest (+ pytest-asyncio), plus the eval suite.
+
+
+5. Architecture (target)
+
+Because Pinecone is a managed cloud service (not a local container), put it behind an interface so
+local dev and CI stay hermetic and free:
+
+
+Define a VectorStore protocol (upsert, query, delete).
+Provide two implementations: PineconeVectorStore (default / production) and a
+LocalVectorStore (in-memory or Chroma) used automatically in tests and CI when no Pinecone key
+is set. This keeps CI free, makes tests deterministic, and is itself a good design talking point.
+
+
+                         ┌──────────────┐
+        upload ───────►  │  FastAPI API │  ◄─────── query (streaming)
+                         └──────┬───────┘
+                                │ enqueue           │ retrieve+generate
+                     ┌──────────▼─────────┐         ▼
+                     │  Ingestion workers │   ┌──────────────────────────────┐
+                     │ parse→chunk→embed  │   │ Retrieval pipeline           │
+                     │ retries/DLQ/idemp. │   │ dense (Pinecone) + BM25 (PG) │
+                     └──────────┬─────────┘   │ →RRF →cross-encoder rerank    │
+                    dense │     │ metadata     │ →(query rewrite/HyDE)         │
+              ┌───────────▼──┐  ▼   +BM25 FTS  │ →LLM answer + citations       │
+              │  Pinecone    │ ┌────────┐      └───────────────┬──────────────┘
+              │ (serverless) │ │Postgres│◄── lexical search    │
+              └──────────────┘ └────────┘      ┌───────┐       │
+                                                │ Redis │◄─ semantic cache
+                                                └───────┘
+   Cross-cutting: Langfuse (LLM tracing+cost) │ MLflow (eval experiments) │
+                  Prometheus/Grafana │ guardrails │ rate limiting
+
+6. Non-functional requirements
+
+
+12-factor config: everything via env vars; committed .env.example; no secrets in git;
+Pinecone/LLM keys read from env only.
+Structured JSON logging with request/correlation IDs; sensible log levels.
+Health & readiness endpoints; FastAPI auto-serves OpenAPI docs.
+Graceful error handling: typed errors, retries with backoff + timeouts on external calls
+(Pinecone, LLM, embeddings).
+Ingestion reliability: idempotent by content hash; dead-letter queue for poison messages.
+Rate limiting on public endpoints.
+Reproducibility: make targets (up, ingest, eval, bench, test, lint); pinned
+deps; a seed script that ingests a small sample corpus.
+Docs: README.md (what/why/how-to-run/architecture diagram), docs/DESIGN.md (decisions +
+tradeoffs, including "why Pinecone, and what I'd use instead at scale — pgvector / Qdrant"),
+docs/BENCHMARKS.md (real numbers), docs/RESUME_BULLETS.md (Section 8).
+
+
+7. Phased milestones
+
+Phases 0–4 are the MVP — a complete, defensible, résumé-ready project. Phases 5–7 are
+high-value extensions. Stop and check in with me after Phase 4.
+
+Phase 0 — Scaffold & hygiene
+
+
+Repo structure, deps, ruff/mypy/pytest, pre-commit hooks.
+docker-compose.yml (API, Postgres, Redis, Langfuse, MLflow) that boots. (Pinecone is cloud — no
+container; wire it via env/VectorStore interface with the LocalVectorStore fallback.)
+Baseline GitHub Actions (lint + type-check + test). .env.example, Makefile, README skeleton.
+Acceptance: make up boots the stack; make test passes (using LocalVectorStore); CI green.
+
+
+Phase 1 — Ingestion pipeline
+
+
+Upload endpoint; parse PDF/markdown/text; configurable chunking; embed; upsert to Pinecone.
+Async workers with retries, idempotency, DLQ. Document/chunk/ingestion-status tables in Postgres,
+with the Postgres full-text (BM25) index populated for the lexical side.
+Seed script + small sample corpus.
+Acceptance: upload a doc, watch it ingest asynchronously, see vectors in Pinecone and status +
+full-text rows in Postgres.
+
+
+Phase 2 — Retrieval & generation
+
+
+Hybrid retrieval: Pinecone dense + Postgres BM25 → RRF → cross-encoder rerank.
+Query rewriting / optional HyDE (toggleable). Grounded, streamed answer with inline citations.
+Provider-agnostic LLM + embedding layer.
+Acceptance: ask a question, get a streamed, cited answer grounded in the corpus.
+
+
+Phase 3 — Evaluation harness
+
+
+Golden Q/A set; retrieval metrics (recall@k, MRR, NDCG@k) + RAGAS generation metrics.
+make eval produces a report; wire into CI as a pass/fail gate with thresholds; log runs
+to MLflow so retrieval configs are comparable. Record before/after numbers (reranking, query
+rewriting) in docs/BENCHMARKS.md.
+Acceptance: make eval outputs a metrics table + MLflow run; CI fails on regression.
+
+
+Phase 4 — Observability, caching, guardrails
+
+
+Langfuse tracing on every query; token + cost + latency captured; Prometheus/Grafana dashboards.
+Semantic cache in Redis; model-tier selection; token/output limits.
+Guardrails: prompt-injection detection, PII redaction, per-client rate limiting.
+Acceptance: a dashboard shows per-query cost/latency; cache hits visible; guardrails block bad input.
+
+
+Phase 5 — Agentic RAG (extension)
+
+
+LangGraph loop: analyze query → retrieve → check sufficiency → re-retrieve/rewrite → synthesize
+with source validation. Toggleable vs. the linear pipeline so eval can compare them (log both to MLflow).
+Acceptance: multi-hop questions the linear pipeline misses are answered by the agent; eval quantifies the gain.
+
+
+Phase 6 — Frontend (extension)
+
+
+Streamlit chat UI: streaming answers, shown citations, source preview, session history.
+Acceptance: a usable chat UI over the API.
+
+
+Phase 7 — Cloud-native deploy (extension)
+
+
+K8s manifests + Helm chart (API + workers + Postgres + Redis), HPA autoscaling; runs on kind/minikube.
+Terraform modules for a cloud path (managed Postgres/Redis + Pinecone key wiring).
+Deploy a free public demo (Streamlit Community Cloud or Hugging Face Spaces for the UI; free-tier
+LLM). NOTE: Pinecone's free Starter index pauses after ~3 weeks of inactivity and is single-region
+(AWS us-east-1) — handle a paused index gracefully (reconnect/wake) and document this in the README.
+Acceptance: helm install brings the app up on a local cluster; Terraform plan is clean; demo URL works.
+
+
+8. Pinecone specifics (free tier)
+
+
+Use the Starter (free) plan: multiple indexes, ~2 GB storage, monthly read/write unit
+allowances — comfortably enough for this project. No paid plan needed; do not trigger paid
+usage without asking me.
+Region is AWS us-east-1 on the free tier; one project. Read the key from PINECONE_API_KEY.
+Indexes pause after ~3 weeks of inactivity — the app must reconnect/rewake gracefully.
+Keep the LocalVectorStore fallback working so tests and CI never require Pinecone credentials.
+
+
+9. Deliverables for my résumé
+
+Maintain docs/RESUME_BULLETS.md with 3–5 bullets in the format **production metric > model metric
+
+
+tools**, each backed by a real number from docs/BENCHMARKS.md (fill with true measured values;
+never invent):
+
+
+
+
+"Built a production RAG platform (FastAPI, LangChain, Pinecone) with hybrid retrieval (dense +
+BM25 + RRF) and cross-encoder reranking, improving answer relevance NDCG@5 from X to Y on an
+N-document corpus."
+"Cut median query cost Z% and p95 latency from Ams to Bms via semantic caching and
+model-tier routing; instrumented token/cost/latency with Langfuse."
+"Engineered an async ingestion pipeline (Celery/Redis) with retries, idempotency, and a
+dead-letter queue, sustaining T docs/min; tracked retrieval-config experiments in MLflow."
+"Gated a RAGAS + retrieval-metric evaluation suite in CI (GitHub Actions), catching quality
+regressions before deploy; deployed on Kubernetes with Terraform-provisioned infra."
+
+
+10. Guardrails on scope
+
+
+Don't gold-plate. A correct, tested, well-documented MVP (Phases 0–4) beats a sprawling half-built system.
+Keep it runnable at every step. If a dependency is heavy or flaky, propose a lighter alternative first.
+Every tool must have a reason I can explain in an interview. If something is there only for
+keyword coverage, tell me so I can decide.

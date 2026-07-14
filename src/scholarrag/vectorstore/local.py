@@ -72,6 +72,14 @@ class LocalVectorStore:
         scored.sort(key=lambda m: m.score, reverse=True)
         return scored[:top_k]
 
+    def fetch(self, id: str, *, namespace: str = "") -> Metadata | None:
+        entry = self._ns(namespace).get(id)
+        if entry is None:
+            return None
+
+        _vector, metadata = entry
+        return dict(metadata)
+
     def delete(
         self,
         ids: list[str] | None = None,

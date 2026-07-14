@@ -81,6 +81,15 @@ def test_upsert_dimension_mismatch_raises(store: LocalVectorStore) -> None:
         store.upsert([VectorRecord(id="bad", values=[1.0, 0.0])])
 
 
+def test_fetch_returns_metadata(store: LocalVectorStore) -> None:
+    store.upsert([VectorRecord(id="a", values=[1.0, 0.0, 0.0], metadata={"doc": "1"})])
+    assert store.fetch("a") == {"doc": "1"}
+
+
+def test_fetch_missing_returns_none(store: LocalVectorStore) -> None:
+    assert store.fetch("nope") is None
+
+
 def test_delete_by_id(store: LocalVectorStore) -> None:
     store.upsert(
         [

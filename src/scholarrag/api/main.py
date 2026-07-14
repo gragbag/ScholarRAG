@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 
 from scholarrag import __version__
@@ -26,6 +26,14 @@ logger = get_logger(__name__)
 class HealthResponse(BaseModel):
     status: str
     version: str
+
+
+class CorpusProfileResponse(BaseModel):
+    name: str
+    description: str
+    chunk_size: int
+    chunk_overlap: int
+    file_types: list[str]
 
 
 class ReadinessResponse(BaseModel):
@@ -110,6 +118,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             vector_store="pinecone" if settings.use_pinecone else "local",
             corpus_profile=profile.name,
             corpus_profiles_available=list(available_profiles()),
+        )
+
+    @app.get("/corpus/{name}", response_model=CorpusProfileResponse, tags=["corpus"])
+    async def get_corpus(name: str) -> CorpusProfileResponse:
+        try:
+            profile = get_corpus_profile(name)
+        except KeyError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown corpus profile: {name}",
+            ) from None
+
+        return CorpusProfileResponse(
+            name=profile.name,
+            description=profile.description,
+            chunk_size=profile.chunk_size,
+            chunk_overlap=profile.chunk_overlap,
+            file_types=list(profile.file_types),
         )
 
     return app

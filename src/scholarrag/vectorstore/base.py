@@ -52,6 +52,9 @@ class VectorStore(Protocol):
         """Return up to ``top_k`` nearest neighbours to ``vector``."""
         ...
 
+    def fetch(self, id: str, *, namespace: str = "") -> Metadata | None:
+        """Return the metadata for ``id``, or None if it does not exist."""
+
     def delete(
         self,
         ids: list[str] | None = None,

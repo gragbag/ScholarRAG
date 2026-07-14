@@ -51,6 +51,21 @@ _RESEARCH_PAPERS = CorpusProfile(
     ),
 )
 
+_LEGAL_DOCS = CorpusProfile(
+    name="legal_docs",
+    description="Legal Documents such as contracts and case laws",
+    chunk_size=800,
+    chunk_overlap=150,
+    file_types=(".pdf", ".md", ".txt"),
+    answer_system_prompt=(
+        "You are a meticulous research assistant answering questions about a "
+        "corpus of scientific papers. Answer using ONLY the provided source "
+        "excerpts and cite each excerpt you rely on. Prefer precise, technical "
+        "language. If the excerpts do not support an answer, say so rather than "
+        "speculating."
+    ),
+)
+
 _GENERIC_DOCS = CorpusProfile(
     name="generic_docs",
     description="Any mixed corpus of PDF / markdown / text documents.",
@@ -60,6 +75,7 @@ _GENERIC_DOCS = CorpusProfile(
 
 _REGISTRY: dict[str, CorpusProfile] = {
     _RESEARCH_PAPERS.name: _RESEARCH_PAPERS,
+    _LEGAL_DOCS.name: _LEGAL_DOCS,
     _GENERIC_DOCS.name: _GENERIC_DOCS,
 }
 

@@ -89,6 +89,16 @@ class PineconeVectorStore:
             for match in result.get("matches", [])
         ]
 
+    def fetch(self, id: str, *, namespace: str = "") -> Metadata | None:
+        index = self._connect()
+        result = index.fetch(ids=[id], namespace=namespace)
+        vectors = result.get("vectors") or {}
+        record = vectors.get(id)
+        if record is None:
+            return None
+
+        return dict(record.get("metadata") or {})
+
     def delete(
         self,
         ids: list[str] | None = None,
