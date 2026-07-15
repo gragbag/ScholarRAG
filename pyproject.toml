@@ -22,11 +22,18 @@ dependencies = [
     "sqlalchemy>=2.0.36",
     "alembic>=1.14",
     "psycopg[binary]>=3.2",
+    # Phase 1 (Step 3): PDF text extraction. Pure-Python, MIT, tiny — kept in
+    # core so PDF parsing is covered by CI.
+    "pypdf>=5.0",
 ]
 
 [project.optional-dependencies]
 # Populated in later phases; declared now so the layering is visible.
 llm = ["anthropic>=0.40"]
+# Local embeddings pull in torch (large). Kept OUT of core so tests/CI stay fast
+# — they use the dependency-free FakeEmbedder. `make install` (--all-extras)
+# installs this for real embeddings locally.
+embeddings = ["sentence-transformers>=3.0"]
 ingestion = []
 retrieval = []
 eval = []
@@ -77,7 +84,7 @@ disallow_untyped_defs = true
 
 # Optional third-party packages installed only in later phases / production.
 [[tool.mypy.overrides]]
-module = ["pinecone.*"]
+module = ["pinecone.*", "sentence_transformers.*", "pypdf.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

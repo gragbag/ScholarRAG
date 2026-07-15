@@ -21,9 +21,12 @@ class CorpusProfile:
 
     name: str
     description: str
-    # Chunking (token-ish word counts; the concrete splitter arrives in Phase 1).
-    chunk_size: int = 800
-    chunk_overlap: int = 120
+    # Chunking, measured in WORDS (the chunker in scholarrag.ingestion.chunk is
+    # word-based). Keep chunk_size well under the embedding model's token limit:
+    # bge-small-en-v1.5 caps at 512 tokens (~380 words), so ~300 words / ~50
+    # overlap stays safely inside it and avoids silent truncation.
+    chunk_size: int = 300
+    chunk_overlap: int = 50
     # Accepted source extensions (lower-case, with leading dot).
     file_types: tuple[str, ...] = (".pdf", ".md", ".txt")
     # System-prompt framing for grounded generation (Phase 2).
@@ -39,8 +42,8 @@ class CorpusProfile:
 _RESEARCH_PAPERS = CorpusProfile(
     name="research_papers",
     description="Scientific papers and research PDFs (the default domain).",
-    chunk_size=900,
-    chunk_overlap=150,
+    chunk_size=320,
+    chunk_overlap=64,
     file_types=(".pdf", ".md", ".txt"),
     answer_system_prompt=(
         "You are a meticulous research assistant answering questions about a "
@@ -69,8 +72,8 @@ _LEGAL_DOCS = CorpusProfile(
 _GENERIC_DOCS = CorpusProfile(
     name="generic_docs",
     description="Any mixed corpus of PDF / markdown / text documents.",
-    chunk_size=800,
-    chunk_overlap=120,
+    chunk_size=300,
+    chunk_overlap=50,
 )
 
 _REGISTRY: dict[str, CorpusProfile] = {

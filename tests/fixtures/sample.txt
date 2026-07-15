@@ -1,0 +1,5 @@
+Retrieval-augmented generation grounds a language model in retrieved documents.
+
+Instead of relying only on parametric memory, the system fetches relevant
+passages from a corpus and conditions its answer on them. This sample text file
+exists so the ScholarRAG parser tests have something real to extract.

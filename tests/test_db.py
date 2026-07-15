@@ -153,7 +153,7 @@ def test_add_chunks_and_generated_fts(db: Session) -> None:
     assert hits == 1
 
 
-#@pytest.mark.skip(reason="Step 1 exercise — implement list_documents; see EXERCISES.md")
+# @pytest.mark.skip(reason="Step 1 exercise — implement list_documents; see EXERCISES.md")
 def test_list_documents(db: Session) -> None:
     _make_doc(db, filename="a.pdf")
     _make_doc(db, filename="b.pdf")

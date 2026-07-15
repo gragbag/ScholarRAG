@@ -18,7 +18,8 @@ from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LLMProvider = Literal["anthropic", "gemini", "openai", "ollama"]
-EmbeddingProvider = Literal["local", "openai"]
+# "fake" = deterministic, dependency-free embedder used in tests/CI.
+EmbeddingProvider = Literal["local", "fake", "openai"]
 VectorStoreKind = Literal["auto", "local", "pinecone"]
 
 

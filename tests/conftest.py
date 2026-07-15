@@ -21,6 +21,7 @@ def settings() -> Settings:
     return Settings(
         environment="ci",
         vector_store="local",
+        embedding_provider="fake",  # deterministic, no torch/model download
         anthropic_api_key=None,
         pinecone_api_key=None,
     )

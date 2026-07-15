@@ -26,7 +26,9 @@ jobs:
         run: uv python install 3.12
 
       - name: Install dependencies
-        run: uv sync --all-extras
+        # No --all-extras: keeps CI free of heavy optional deps (torch, etc.).
+        # Tests use the dependency-free FakeEmbedder + LocalVectorStore.
+        run: uv sync
 
       - name: Ruff format check
         run: uv run ruff format --check .
@@ -38,8 +40,9 @@ jobs:
         run: uv run mypy src tests
 
       - name: Pytest
-        # No Pinecone/LLM keys in CI → LocalVectorStore + no live calls.
+        # No Pinecone/LLM keys in CI → LocalVectorStore, FakeEmbedder, no live calls.
         env:
           ENVIRONMENT: ci
           VECTOR_STORE: local
+          EMBEDDING_PROVIDER: fake
         run: uv run pytest
