@@ -191,6 +191,28 @@ Watch out for the off-by-one that emits a trailing duplicate window.
 
 **Acceptance:** all 5 `test_chunk_*` pass; `ruff check` + `mypy` clean.
 
+## Step 4 — Implement `IngestionPipeline._build_records`
+
+**Concept:** the "glue" that ties the layers together — mapping each chunk +
+its embedding into a vector-store record *and* a DB chunk row, linked by a
+deterministic `vector_id`.
+**File:** `src/scholarrag/ingestion/pipeline.py`
+**Target tests:** the 2 skipped `test_ingest_*` tests in
+`tests/test_ingestion_pipeline.py` (need Postgres running).
+
+**Steps:** `chunks` and `embeddings` are parallel lists. For each
+`(chunk, embedding)` pair (use `zip(chunks, embeddings, strict=True)`):
+1. `vector_id = f"{document_id}:{chunk.index}"`.
+2. A `VectorRecord(id=vector_id, values=embedding, metadata={...})` with metadata
+   `{"text": chunk.text, "document_id": str(document_id), "chunk_index":
+   chunk.index, "filename": filename}`.
+3. A `NewChunk(chunk_index=chunk.index, text=chunk.text, vector_id=vector_id,
+   char_count=chunk.char_count)`.
+
+Return `(records, new_chunks)`.
+
+**Acceptance:** both `test_ingest_*` pass; `ruff check` + `mypy` clean.
+
 ---
 
 ## When you're done

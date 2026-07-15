@@ -42,7 +42,7 @@ class FakeEmbedder:
 
     def _embed(self, text: str) -> Vector:
         """Turn ``text`` into a deterministic, L2-normalized vector of length ``dim``."""
-        embeddings = [0] * self._dim
+        embeddings = [0.0] * self._dim
         for token in _tokenize(text):
             embeddings[int(hashlib.sha1(token.encode()).hexdigest(), 16) % self._dim] += 1.0
 

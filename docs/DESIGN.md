@@ -54,6 +54,42 @@ evaluate `pgvector`* (one less system, transactional with our metadata) *or
 Qdrant* (open-source, self-hostable, rich filtering) depending on whether
 operational simplicity or managed convenience mattered more.
 
+## Phase 1 decisions
+
+### The dual-write problem (vector store + Postgres)
+The ingestion pipeline writes to **two systems that don't share a transaction**:
+Postgres (document + chunk rows) and the vector store (embeddings). If the second
+write fails after the first succeeds, they diverge — e.g. Postgres commits chunk
+rows but the vector upsert fails, or vectors land but the DB commit fails,
+leaving orphaned vectors.
+
+*What we do:* order operations so a failure rolls back the Postgres work and
+marks the document `failed` (re-raised for the worker to retry), and treat the
+content hash as the idempotency key so a retry re-runs cleanly. This shrinks —
+but does not eliminate — the inconsistency window.
+
+*What larger systems do (and what I'd reach for at scale):*
+- **Transactional outbox** — write "please upsert these vectors" as a row in the
+  *same* Postgres transaction as the chunk rows, then a separate relay process
+  reads the outbox and performs the vector upsert with retries. The DB commit is
+  the single source of truth; the vector store becomes eventually consistent.
+- **Reconciliation / repair jobs** — a periodic sweep that finds documents whose
+  DB state and vector-store state disagree and repairs them.
+- **Idempotent upserts + deterministic IDs** (we already do this: `vector_id =
+  {document_id}:{chunk_index}`), so re-running an ingest overwrites rather than
+  duplicates.
+- **Saga / compensating actions** for multi-step distributed writes.
+
+For a single-corpus portfolio system the ordered-writes + idempotency approach is
+proportionate; the outbox is the natural upgrade if this were multi-tenant or
+high-volume.
+
+### Ingestion pipeline shape
+`IngestionPipeline` holds the long-lived `Embedder` + `VectorStore` and takes a
+per-request `Session` — dependency injection, so tests inject `FakeEmbedder` +
+`LocalVectorStore` and never touch a model or the cloud. Status is committed at
+`running` (not just at the end) so async callers can observe progress.
+
 ## Open questions for later phases
 
 - Hybrid lexical side: Postgres full-text (default, transparent, reuses PG) vs.

@@ -1,72 +1,22 @@
 """Database repository tests.
 
 These need a real Postgres (the generated ``tsvector`` column and enum types are
-Postgres-specific — SQLite can't fake them). The ``db_engine`` fixture skips the
-whole module if Postgres isn't reachable, so ``pytest`` stays green locally
-without the DB. Start it with:  ``docker compose up -d postgres``
-
-Isolation: each test runs inside a transaction that is always rolled back, so
-tests never see each other's rows even though the repository ``flush``es.
+Postgres-specific — SQLite can't fake them). The shared ``db`` fixture (in
+conftest.py) skips them automatically if Postgres isn't reachable.
 """
 
 from __future__ import annotations
 
-import os
 import uuid
-from collections.abc import Iterator
 
 import pytest
-from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from scholarrag.db import repository as repo
-from scholarrag.db.models import Base, Document, IngestionStatus
+from scholarrag.db.models import Document, IngestionStatus
 from scholarrag.db.repository import NewChunk
-
-TEST_DSN = os.environ.get(
-    "TEST_DATABASE_URL",
-    "postgresql+psycopg://scholarrag:scholarrag@localhost:5433/scholarrag",
-)
-
-
-@pytest.fixture(scope="session")
-def db_engine() -> Iterator[Engine]:
-    engine = create_engine(TEST_DSN, pool_pre_ping=True)
-    try:
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-    except OperationalError:
-        engine.dispose()
-        pytest.skip("Postgres not reachable — start it: docker compose up -d postgres")
-    Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
-    engine.dispose()
-
-
-@pytest.fixture
-def db(db_engine: Engine) -> Iterator[Session]:
-    # Wrap each test in an outer transaction we always roll back. The session
-    # joins it via a SAVEPOINT ("create_savepoint"), so a rollback *inside* the
-    # test (e.g. when an IntegrityError auto-rolls-back) only unwinds to the
-    # savepoint and leaves our outer transaction intact to clean up.
-    connection = db_engine.connect()
-    transaction = connection.begin()
-    session = Session(
-        bind=connection,
-        expire_on_commit=False,
-        join_transaction_mode="create_savepoint",
-    )
-    try:
-        yield session
-    finally:
-        session.close()
-        if transaction.is_active:
-            transaction.rollback()
-        connection.close()
 
 
 def _make_doc(

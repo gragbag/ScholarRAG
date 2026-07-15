@@ -61,7 +61,7 @@ def chunk_text(text: str, profile: CorpusProfile) -> list[TextChunk]:
     words = text.split()
     if not words:
         return []
-    
+
     size = profile.chunk_size
     overlap = profile.chunk_overlap
     stride = size - overlap
@@ -70,7 +70,7 @@ def chunk_text(text: str, profile: CorpusProfile) -> list[TextChunk]:
     i = 0
     chunks = []
     for i, start in enumerate(range(0, len(words), stride)):
-        chunk_text = " ".join(words[start: start + size])
+        chunk_text = " ".join(words[start : start + size])
         chunks.append(TextChunk(index=i, text=chunk_text, char_count=len(chunk_text)))
 
         if start + size >= len(words):
@@ -79,4 +79,3 @@ def chunk_text(text: str, profile: CorpusProfile) -> list[TextChunk]:
         start += stride
 
     return chunks
-

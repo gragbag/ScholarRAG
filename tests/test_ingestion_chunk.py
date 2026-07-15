@@ -7,8 +7,6 @@ pin down the exact windowing behaviour (sizes, overlap, no trailing duplicate).
 
 from __future__ import annotations
 
-import pytest
-
 from scholarrag.corpus import CorpusProfile
 from scholarrag.ingestion import TextChunk, chunk_text
 

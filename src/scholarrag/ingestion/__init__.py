@@ -19,7 +19,12 @@ from scholarrag.ingestion.parse import (
     extract_text_from_path,
 )
 
+# Imported last: pipeline depends on the primitives above.
+from scholarrag.ingestion.pipeline import IngestionPipeline, IngestResult
+
 __all__ = [
+    "IngestResult",
+    "IngestionPipeline",
     "TextChunk",
     "UnsupportedFileTypeError",
     "chunk_text",
