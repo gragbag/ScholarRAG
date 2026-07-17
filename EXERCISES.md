@@ -213,6 +213,26 @@ Return `(records, new_chunks)`.
 
 **Acceptance:** both `test_ingest_*` pass; `ruff check` + `mypy` clean.
 
+## Step 5 — Implement `is_transient` (retry vs dead-letter)
+
+**Concept:** a retry only helps if the failure might succeed next time. This
+function is the "reliability brain" — it decides whether a failed ingestion task
+is **retried** (transient) or sent to the **dead-letter queue** (permanent).
+**File:** `src/scholarrag/workers/tasks.py`
+**Target tests:** the 2 skipped `test_is_transient*` tests in
+`tests/test_workers.py`.
+
+**Steps:** implement the one-liner:
+```python
+return isinstance(exc, TRANSIENT_ERRORS)
+```
+`TRANSIENT_ERRORS` (defined just above) lists the retryable types
+(`TransientIngestionError`, `ConnectionError`, `TimeoutError`). Everything else —
+a corrupt file, an unsupported type, a bug — is permanent; retrying would just
+loop, so it goes to the dead-letter state.
+
+**Acceptance:** both `test_is_transient*` pass; `ruff check` + `mypy` clean.
+
 ---
 
 ## When you're done

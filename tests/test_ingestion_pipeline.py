@@ -9,6 +9,8 @@ passes now — it exercises the pipeline wiring without reaching the glue.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -78,3 +80,33 @@ def test_ingest_is_idempotent(db: Session) -> None:
     assert second.skipped is True  # identical bytes → not re-ingested
     assert second.document_id == first.document_id
     assert repo.count_chunks(db, first.document_id) == first.num_chunks
+
+
+def test_register_stores_bytes_then_process(db: Session) -> None:
+    # The async split: register (fast, stores bytes) then process (heavy work).
+    embedder = FakeEmbedder(dim=DIM)
+    store = LocalVectorStore(dim=DIM)
+    pipe = IngestionPipeline(embedder=embedder, vector_store=store)
+    profile = get_corpus_profile("generic_docs")
+    data = _doc_bytes()
+
+    reg = pipe.register(db, data=data, filename="paper.txt", profile=profile)
+    assert reg.created is True
+    assert reg.document.status is IngestionStatus.queued
+    assert reg.document.raw_content == data  # bytes stored for the worker to fetch
+
+    # Re-registering identical bytes is a no-op (won't be enqueued again).
+    reg2 = pipe.register(db, data=data, filename="paper.txt", profile=profile)
+    assert reg2.created is False
+    assert reg2.document.id == reg.document.id
+
+    result = pipe.process(db, reg.document.id)
+    assert result.status is IngestionStatus.completed
+    assert result.num_chunks > 1
+    assert store.count() == result.num_chunks
+
+
+def test_process_missing_document_raises(db: Session) -> None:
+    pipe = IngestionPipeline(embedder=FakeEmbedder(dim=DIM), vector_store=LocalVectorStore(dim=DIM))
+    with pytest.raises(ValueError, match="not found"):
+        pipe.process(db, uuid.uuid4())

@@ -20,12 +20,19 @@ from scholarrag.ingestion.parse import (
 )
 
 # Imported last: pipeline depends on the primitives above.
-from scholarrag.ingestion.pipeline import IngestionPipeline, IngestResult
+from scholarrag.ingestion.pipeline import (
+    IngestionPipeline,
+    IngestResult,
+    RegisterResult,
+    TransientIngestionError,
+)
 
 __all__ = [
     "IngestResult",
     "IngestionPipeline",
+    "RegisterResult",
     "TextChunk",
+    "TransientIngestionError",
     "UnsupportedFileTypeError",
     "chunk_text",
     "content_hash",

@@ -27,6 +27,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -76,6 +77,10 @@ class Document(Base):
     )
     error: Mapped[str | None] = mapped_column(Text, default=None)
     num_chunks: Mapped[int] = mapped_column(Integer, default=0)
+    # Raw uploaded bytes, so a background worker (a separate process) can fetch
+    # them by id. `deferred` keeps them out of ordinary SELECTs; Postgres stores
+    # large values out-of-line via TOAST. (Object storage is the scale-up path.)
+    raw_content: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

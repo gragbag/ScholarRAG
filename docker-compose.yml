@@ -68,6 +68,26 @@ services:
       redis:
         condition: service_healthy
 
+  worker:
+    # Same image/env as the API — it just runs the Celery worker instead of
+    # uvicorn. Consumes ingestion tasks from Redis and runs the pipeline.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A scholarrag.workers.celery_app worker -l info --concurrency 2
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DSN: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   langfuse:
     image: langfuse/langfuse:2
     restart: unless-stopped
