@@ -233,6 +233,33 @@ loop, so it goes to the dead-letter state.
 
 **Acceptance:** both `test_is_transient*` pass; `ruff check` + `mypy` clean.
 
+## Step 6 — the document API (two parts)
+
+### Exercise A — `GET /documents/{id}` status endpoint
+**Concept:** the poll-for-status half of the async pattern — path param, 404, and
+mapping a model to a response.
+**File:** `src/scholarrag/api/routes/documents.py`
+**Target test:** `test_get_document_status` in `tests/test_api_documents.py`
+(needs Postgres).
+
+Implement `get_document`: look up `repo.get_document(session, document_id)`; if
+`None`, raise `HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")`;
+otherwise `return _to_response(document)`. The `list_documents` route right above
+shows the same mapping.
+
+### Exercise B — `ingest_corpus` (the seed loop)
+**Concept:** walk a directory and ingest each supported file, skipping the rest.
+**File:** `src/scholarrag/scripts/seed.py`
+**Target test:** `test_ingest_corpus` in `tests/test_api_documents.py`.
+
+Implement `ingest_corpus`: iterate `sorted(corpus_dir.iterdir())`, keep files
+(`path.is_file()`), read bytes, and `pipeline.ingest(session, data=..., filename=path.name,
+profile=profile)`; wrap each in `try/except UnsupportedFileTypeError: continue` to
+skip unsupported types; collect and return the `IngestResult`s.
+
+**Acceptance:** both skipped tests pass; `ruff check` + `mypy` clean. Then, with
+Postgres up and the embeddings extra installed, `make seed` populates the corpus.
+
 ---
 
 ## When you're done

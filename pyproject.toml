@@ -12,6 +12,7 @@ authors = [{ name = "Julian" }]
 # Celery, RAGAS, MLflow, ...) are added in their own phases via optional groups.
 dependencies = [
     "fastapi>=0.115",
+    "python-multipart>=0.0.9",  # required for FastAPI file uploads (UploadFile/File)
     "uvicorn[standard]>=0.32",
     "pydantic>=2.9",
     "pydantic-settings>=2.6",

@@ -45,9 +45,12 @@ def client(settings: Settings) -> Iterator[TestClient]:
         yield test_client
 
 
+# A SEPARATE database from the dev one: the fixtures drop/create tables, so they
+# must never touch `scholarrag` (which holds seeded/uploaded data). Create it once:
+#   docker compose exec postgres psql -U scholarrag -c "CREATE DATABASE scholarrag_test"
 TEST_DSN = os.environ.get(
     "TEST_DATABASE_URL",
-    "postgresql+psycopg://scholarrag:scholarrag@localhost:5433/scholarrag",
+    "postgresql+psycopg://scholarrag:scholarrag@localhost:5433/scholarrag_test",
 )
 
 

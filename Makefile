@@ -31,6 +31,9 @@ check: lint test ## Everything CI runs
 run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
 	uv run uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8001
 
+seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
+	uv run python -m scholarrag.scripts.seed
+
 up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
 	docker compose up -d --build
 

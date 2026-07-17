@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from scholarrag import __version__
 from scholarrag.api.middleware import correlation_id_middleware
+from scholarrag.api.routes import documents
 from scholarrag.config import Settings, get_settings
 from scholarrag.corpus import available_profiles, get_corpus_profile
 from scholarrag.logging import configure_logging, get_logger
@@ -138,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             file_types=list(profile.file_types),
         )
 
+    app.include_router(documents.router)
     return app
 
 

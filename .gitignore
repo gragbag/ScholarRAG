@@ -26,6 +26,9 @@ htmlcov/
 # Data / models / artifacts (kept out of git)
 data/
 !data/.gitkeep
+# ...except the committed sample corpus used by `make seed`.
+!data/sample_corpus/
+!data/sample_corpus/**
 mlruns/
 *.log
 

@@ -1,8 +1,8 @@
-"""add raw_content to documents
+"""initial schema
 
-Revision ID: ca9f1373636f
-Revises: a012b641fda1
-Create Date: 2026-07-16 21:17:13.399702
+Revision ID: 3c3e6004b87e
+Revises: 
+Create Date: 2026-07-16 22:31:39.004288
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = 'ca9f1373636f'
-down_revision: str | None = 'a012b641fda1'
+revision: str = '3c3e6004b87e'
+down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
