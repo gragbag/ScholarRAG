@@ -280,6 +280,38 @@ Full step-by-step guidance is in each function's docstring.
 
 **Acceptance:** both `test_*retriever*` pass; `ruff check` + `mypy` clean.
 
+## Step 2 — hybrid retrieval: RRF fusion + reranking (three functions)
+
+The two engines from Step 1 have complementary blind spots (dense = meaning,
+lexical = exact terms). Step 2 runs both, **fuses** their ranked lists, then
+**reranks** the shortlist for precision. All three targets are hermetic — no
+Postgres, no torch.
+
+### Exercise A — `reciprocal_rank_fusion` (the heart)
+**File:** `src/scholarrag/retrieval/fusion.py` · **Target:** `tests/test_fusion.py`
+(remove the module-level `pytestmark` skip).
+Combine ranked lists by *position*, not score: sum `1/(k+rank)` (1-based) per
+chunk id across lists; a chunk in both lists gets two contributions. Sort ids by
+fused score desc, rebuild each `RetrievedChunk` with `replace(chunk, score=...)`
+(it's frozen), apply `top_k`. Step-by-step in the docstring.
+
+### Exercise B — `HybridRetriever.retrieve` (the composition)
+**File:** `src/scholarrag/retrieval/hybrid.py` · **Target:** `tests/test_hybrid.py`.
+Ask dense + lexical each for a `candidate_k` pool, `reciprocal_rank_fusion` them,
+then: no reranker → `fused[:top_k]`; else `reranker.rerank(query, fused, top_k=top_k)`.
+
+### Exercise C — `CrossEncoderReranker.rerank` (precision second stage)
+**File:** `src/scholarrag/retrieval/rerank.py` · **Target:**
+`test_cross_encoder_rerank_orders_by_score` in `tests/test_rerank.py`.
+Build `(query, chunk.text)` pairs, score them all with `self._predict(pairs)`,
+`replace` each chunk's score, sort desc, truncate. (`FakeReranker` is already
+done for you as the test/CI backend; the test injects a stub `predict_fn` so you
+never load a model.)
+
+**Acceptance:** `test_fusion.py`, `test_hybrid.py`, and the cross-encoder test all
+pass; `ruff check` + `mypy` clean. Flip `RERANKER_PROVIDER=cross_encoder` (with the
+`embeddings` extra) to feel reranking on real queries.
+
 ---
 
 ## When you're done

@@ -93,13 +93,14 @@ disallow_untyped_defs = true
 
 # Optional third-party packages installed only in later phases / production.
 [[tool.mypy.overrides]]
-module = ["sentence_transformers.*", "pypdf.*", "celery.*"]
+module = ["pypdf.*", "celery.*"]
 ignore_missing_imports = true
 
-# pinecone ships types, but its Index/GrpcIndex unions are noisy — treat it as
-# untyped (Any) so our thin wrapper stays clean.
+# pinecone and sentence-transformers ship types, but their unions (Index /
+# CrossEncoder.predict) are noisy and they're installed only locally, not in CI —
+# treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
-module = ["pinecone.*"]
+module = ["pinecone.*", "sentence_transformers.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

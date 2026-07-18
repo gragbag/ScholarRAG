@@ -24,30 +24,7 @@ class DenseRetriever:
         self._vector_store = vector_store
 
     def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
-        """Embed the query and return the ``top_k`` nearest chunks.
-
-        ── YOUR TURN (Phase 2, Step 1 — exercise A) ────────────────────────────
-        (``session`` is unused here — dense retrieval reads from the vector store.)
-
-        1. Embed the query with the query-side method:
-               vector = self._embedder.embed_query(query)
-           (Not embed_documents — queries get the instruction prefix; this must be
-           the same embedder that produced the stored vectors.)
-        2. Query the store:
-               matches = self._vector_store.query(vector, top_k=top_k)
-        3. Map each match to a RetrievedChunk. Each ``match`` has ``.id`` (the
-           vector_id), ``.score`` (cosine), and ``.metadata`` (a dict) carrying
-           "text", "document_id", "chunk_index", "filename". Remember metadata
-           values are typed loosely, so coerce:
-               document_id=uuid.UUID(str(match.metadata["document_id"]))
-               chunk_index=int(match.metadata["chunk_index"])
-               text=str(match.metadata["text"]) ...
-           Return the list (already ordered best-first by the store).
-
-        Target test: ``test_dense_retriever_ranks_by_meaning`` in
-        tests/test_retrieval.py. See EXERCISES.md → Phase 2 Step 1.
-        ────────────────────────────────────────────────────────────────────────
-        """
+        "Embed the query and return the ``top_k`` nearest chunks."
         vector = self._embedder.embed_query(query)
 
         matches = self._vector_store.query(vector, top_k=top_k)
@@ -57,11 +34,11 @@ class DenseRetriever:
             chunk = RetrievedChunk(
                 id=match.id,
                 document_id=uuid.UUID(str(match.metadata["document_id"])),
-                chunk_index=int(match.metadata["chunk_index"]), # type: ignore[arg-type]
+                chunk_index=int(match.metadata["chunk_index"]),  # type: ignore[arg-type]
                 text=str(match.metadata["text"]),
                 filename=str(match.metadata["filename"]),
                 score=match.score,
             )
             chunks.append(chunk)
-        
+
         return chunks

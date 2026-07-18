@@ -21,6 +21,8 @@ LLMProvider = Literal["anthropic", "gemini", "openai", "ollama"]
 # "fake" = deterministic, dependency-free embedder used in tests/CI.
 EmbeddingProvider = Literal["local", "fake", "openai"]
 VectorStoreKind = Literal["auto", "local", "pinecone"]
+# "none" = fusion only (no rerank); "fake" = deterministic torch-free reranker.
+RerankerProvider = Literal["cross_encoder", "fake", "none"]
 
 
 class Settings(BaseSettings):
@@ -69,6 +71,14 @@ class Settings(BaseSettings):
     pinecone_index: str = "scholarrag"
     pinecone_cloud: str = "aws"
     pinecone_region: str = "us-east-1"
+
+    # -- Retrieval / reranking (Phase 2 Step 2) ------------------------------
+    # Hybrid retrieval fuses dense + lexical with Reciprocal Rank Fusion, then
+    # (optionally) a cross-encoder reranks the fused shortlist for precision.
+    reranker_provider: RerankerProvider = "none"
+    reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    retrieval_candidate_k: int = 50  # stage-1 pool size fed to fusion/rerank
+    rrf_k: int = 60  # RRF constant; larger => flatter weighting of top ranks
 
     # -- Infrastructure (Phase 1+) ------------------------------------------
     # Host ports are offset (5433/6380) to coexist with other local stacks; see
