@@ -260,6 +260,26 @@ skip unsupported types; collect and return the `IngestResult`s.
 **Acceptance:** both skipped tests pass; `ruff check` + `mypy` clean. Then, with
 Postgres up and the embeddings extra installed, `make seed` populates the corpus.
 
+# Phase 2 exercises
+
+## Step 1 — the two retrievers (two functions)
+
+### Exercise A — `DenseRetriever.retrieve` (semantic)
+**File:** `src/scholarrag/retrieval/dense.py` · **Target:** `test_dense_retriever_ranks_by_meaning`.
+Embed the query with `self._embedder.embed_query(query)`, `self._vector_store.query(vector, top_k=top_k)`,
+then map each match → `RetrievedChunk` (id from `match.id`, the rest from
+`match.metadata`, coercing types: `uuid.UUID(str(...))`, `int(...)`, `str(...)`).
+
+### Exercise B — `LexicalRetriever.retrieve` (keyword, Postgres FTS)
+**File:** `src/scholarrag/retrieval/lexical.py` · **Target:** `test_lexical_retriever_finds_keyword` (needs Postgres).
+A SQLAlchemy full-text query: `func.websearch_to_tsquery("english", query)`,
+`func.ts_rank(Chunk.fts, tsquery)`, `.where(Chunk.fts.op("@@")(tsquery))`,
+`.order_by(rank.desc()).limit(top_k)`, join `Document` for the filename, then map
+each `(chunk, rank, filename)` row → `RetrievedChunk` (id = `chunk.vector_id`).
+Full step-by-step guidance is in each function's docstring.
+
+**Acceptance:** both `test_*retriever*` pass; `ruff check` + `mypy` clean.
+
 ---
 
 ## When you're done

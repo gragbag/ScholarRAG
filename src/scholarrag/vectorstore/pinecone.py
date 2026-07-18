@@ -119,7 +119,13 @@ class PineconeVectorStore:
         index = self._connect()
         stats = index.describe_index_stats()
         namespaces = stats.get("namespaces") or {}
-        ns_stats = namespaces.get(namespace or "")
+        # SDK 9.x labels the default namespace "__default__" in the stats, even
+        # though we upsert/query it as "". And each entry is a NamespaceSummary
+        # object (attribute access), not a dict.
+        ns_stats = namespaces.get(namespace or "__default__")
         if ns_stats is None:
             return 0
-        return int(ns_stats.get("vector_count", 0))
+        vector_count = getattr(ns_stats, "vector_count", None)
+        if vector_count is None and isinstance(ns_stats, dict):
+            vector_count = ns_stats.get("vector_count", 0)
+        return int(vector_count or 0)

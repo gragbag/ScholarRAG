@@ -29,6 +29,9 @@ dependencies = [
     # Phase 1 (Step 5): async ingestion workers. [redis] pulls the Redis broker
     # client. Needed by both the API (to enqueue) and the worker (to consume).
     "celery[redis]>=5.4",
+    # Phase 2: the production vector store (serverless, free Starter tier). Only
+    # used when PINECONE_API_KEY is set; CI falls back to LocalVectorStore.
+    "pinecone>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -90,7 +93,14 @@ disallow_untyped_defs = true
 
 # Optional third-party packages installed only in later phases / production.
 [[tool.mypy.overrides]]
-module = ["pinecone.*", "sentence_transformers.*", "pypdf.*", "celery.*"]
+module = ["sentence_transformers.*", "pypdf.*", "celery.*"]
+ignore_missing_imports = true
+
+# pinecone ships types, but its Index/GrpcIndex unions are noisy — treat it as
+# untyped (Any) so our thin wrapper stays clean.
+[[tool.mypy.overrides]]
+module = ["pinecone.*"]
+follow_imports = "skip"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
