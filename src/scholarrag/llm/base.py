@@ -14,6 +14,7 @@ uses ``cheap`` (Haiku); Step 4's grounded generation will use ``strong`` (Sonnet
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Literal, Protocol, runtime_checkable
 
 # Which quality/cost tier a call needs. The client resolves this to a model id.
@@ -41,4 +42,15 @@ class LLMClient(Protocol):
         (No ``temperature`` — current Claude models like Sonnet 5 reject sampling
         parameters with a 400; behaviour is steered by the prompt instead.)
         """
+        ...
+
+    def stream(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        tier: ModelTier = "strong",
+        max_tokens: int | None = None,
+    ) -> Iterator[str]:
+        """Yield the response incrementally as text deltas (for streaming to a client)."""
         ...

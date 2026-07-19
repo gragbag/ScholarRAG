@@ -7,6 +7,8 @@ responses, and records every call so tests can assert on what was sent.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from scholarrag.llm.base import ModelTier
 
 
@@ -35,3 +37,17 @@ class FakeLLM:
         if self._responses:
             return self._responses.pop(0)
         return self._default
+
+    def stream(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        tier: ModelTier = "strong",
+        max_tokens: int | None = None,
+    ) -> Iterator[str]:
+        """Yield the next response in fixed-size slices, mimicking token streaming."""
+        self.calls.append({"prompt": prompt, "system": system, "tier": tier})
+        text = self._responses.pop(0) if self._responses else self._default
+        for i in range(0, len(text), 8):
+            yield text[i : i + 8]

@@ -342,6 +342,34 @@ dedupe preserving order.
 **Acceptance:** all three target tests pass; `ruff check` + `mypy` clean. Flip
 `LLM_PROVIDER=anthropic` with a real key (and the `llm` extra) to run it live.
 
+## Step 4a — grounded cited generation + query pipeline (three functions)
+
+The payoff: turn retrieved chunks into a grounded, cited **answer**, and expose
+it at `POST /query`. Everything composes — rewrite → multi-query retrieve → RRF
+fuse → generate. All three targets are hermetic (`FakeLLM` + stub retriever).
+Recommended order: **C → A → B** (B needs A and C).
+
+### Exercise C — `extract_citations` (LLM-output wrangling)
+**File:** `src/scholarrag/generation/citations.py` · **Target:**
+`test_extract_citations` in `tests/test_generation.py`.
+Regex out `[n]` markers, convert to ints, dedupe preserving order.
+
+### Exercise A — `Answerer.answer` (grounded generation)
+**File:** `src/scholarrag/generation/answerer.py` · **Target:**
+`test_answerer_returns_cited_sources` in `tests/test_generation.py`.
+Build the numbered-source prompt, `complete(..., tier="strong")`, `extract_citations`
+the response, map cited numbers back to chunks, return `Answer(text, sources)`.
+
+### Exercise B — `QueryEngine.query` (the capstone)
+**File:** `src/scholarrag/pipeline/engine.py` · **Target:**
+`test_query_engine_runs_full_flow` in `tests/test_pipeline.py`.
+`rewriter.rewrite` → `retriever.retrieve` per query → `reciprocal_rank_fusion`
+across the lists → `answerer.answer`. The whole system in ~4 lines.
+
+**Acceptance:** all three target tests pass; `ruff check` + `mypy` clean. Then,
+with `LLM_PROVIDER=anthropic` + a key (and Postgres/Pinecone seeded),
+`curl -X POST localhost:8001/query -d '{"query":"..."}'` returns a cited answer.
+
 ---
 
 ## When you're done

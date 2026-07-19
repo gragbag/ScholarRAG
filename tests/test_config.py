@@ -9,11 +9,12 @@ from scholarrag.corpus import available_profiles, get_corpus_profile
 
 
 def test_defaults_prefer_claude_and_local(monkeypatch: pytest.MonkeyPatch) -> None:
-    # This asserts the *code* defaults, so clear any ambient env that CI exports
-    # (the CI workflow sets EMBEDDING_PROVIDER/VECTOR_STORE for hermetic runs).
+    # This asserts the *code* defaults, so ignore both ambient env (CI exports
+    # EMBEDDING_PROVIDER/VECTOR_STORE) and the developer's local .env
+    # (which may set LLM_PROVIDER=gemini etc.).
     for var in ("LLM_PROVIDER", "EMBEDDING_PROVIDER", "VECTOR_STORE"):
         monkeypatch.delenv(var, raising=False)
-    settings = Settings(anthropic_api_key=None, pinecone_api_key=None)
+    settings = Settings(_env_file=None, anthropic_api_key=None, pinecone_api_key=None)
     assert settings.llm_provider == "anthropic"
     assert settings.embedding_provider == "local"
     assert settings.use_pinecone is False

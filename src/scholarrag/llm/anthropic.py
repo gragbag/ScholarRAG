@@ -11,7 +11,7 @@ module never requires the package or a key. ``FakeLLM`` is the tests/CI backend.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator
 from typing import TYPE_CHECKING, Any
 
 from scholarrag.config import Settings
@@ -23,16 +23,25 @@ if TYPE_CHECKING:  # pragma: no cover
 # Signature of anthropic's ``client.messages.create`` (only the kwargs we pass).
 # Returns the SDK's Message object; typed Any so tests can hand back a stub.
 CreateFn = Callable[..., Any]
+# Test seam for streaming: given the same kwargs, yield text deltas.
+StreamFn = Callable[..., Iterable[str]]
 
 
 class AnthropicLLM:
     """Claude-backed :class:`LLMClient`. Resolves tier -> model from settings."""
 
-    def __init__(self, settings: Settings, *, create_fn: CreateFn | None = None) -> None:
-        if settings.anthropic_api_key is None and create_fn is None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        create_fn: CreateFn | None = None,
+        stream_fn: StreamFn | None = None,
+    ) -> None:
+        if settings.anthropic_api_key is None and create_fn is None and stream_fn is None:
             raise ValueError("ANTHROPIC_API_KEY is required for AnthropicLLM")
         self._settings = settings
         self._create_fn = create_fn
+        self._stream_fn = stream_fn
         self._client: Anthropic | None = None
 
     def _client_lazy(self) -> Anthropic:
@@ -72,6 +81,12 @@ class AnthropicLLM:
             "model": model,
             "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt}],
+            # Disable extended thinking: query rewriting and grounded generation
+            # are straightforward tasks, and on Sonnet 5 adaptive thinking is on by
+            # default and shares the max_tokens budget with the answer (risking
+            # truncation). Off = predictable latency/cost. (Sonnet 5 / Haiku 4.5
+            # both accept "disabled"; only Fable 5 would reject it.)
+            "thinking": {"type": "disabled"},
         }
 
         if system is not None:
@@ -79,3 +94,29 @@ class AnthropicLLM:
 
         response = self._create(**kwargs)
         return "".join(b.text for b in response.content if b.type == "text")
+
+    def stream(
+        self,
+        prompt: str,
+        *,
+        system: str | None = None,
+        tier: ModelTier = "strong",
+        max_tokens: int | None = None,
+    ) -> Iterator[str]:
+        """Stream Claude's response as text deltas (used by the SSE endpoint)."""
+        kwargs: dict[str, Any] = {
+            "model": self._model_for_tier(tier),
+            "max_tokens": max_tokens or self._settings.llm_max_output_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+            "thinking": {"type": "disabled"},  # see complete() for why
+        }
+        if system is not None:
+            kwargs["system"] = system
+
+        if self._stream_fn is not None:
+            yield from self._stream_fn(**kwargs)
+            return
+        # The SDK's messages.stream is a context manager exposing a text-delta
+        # iterator; yield each delta as it arrives.
+        with self._client_lazy().messages.stream(**kwargs) as stream:
+            yield from stream.text_stream

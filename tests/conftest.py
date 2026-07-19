@@ -29,7 +29,10 @@ from scholarrag.db.models import Base
 
 @pytest.fixture
 def settings() -> Settings:
+    # _env_file=None: ignore the developer's local .env so this hermetic config is
+    # not polluted by their real LLM_PROVIDER / keys / model overrides.
     return Settings(
+        _env_file=None,
         environment="ci",
         vector_store="local",
         embedding_provider="fake",  # deterministic, no torch/model download

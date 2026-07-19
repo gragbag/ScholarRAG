@@ -62,6 +62,11 @@ class Settings(BaseSettings):
 
     # Optional non-default providers (wired in Phase 2).
     gemini_api_key: str | None = None
+    # Gemini's own model ids (the cheap/strong tiers map to these when
+    # LLM_PROVIDER=gemini). Free-tier friendly defaults; run models.list to see
+    # what your key can access.
+    gemini_model_cheap: str = "gemini-3.1-flash-lite"
+    gemini_model_strong: str = "gemini-3.5-flash"
     openai_api_key: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
@@ -85,6 +90,7 @@ class Settings(BaseSettings):
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     retrieval_candidate_k: int = 50  # stage-1 pool size fed to fusion/rerank
     rrf_k: int = 60  # RRF constant; larger => flatter weighting of top ranks
+    retrieval_top_k: int = 5  # final chunks fed into the answer prompt (Step 4)
 
     # -- Infrastructure (Phase 1+) ------------------------------------------
     # Host ports are offset (5433/6380) to coexist with other local stacks; see

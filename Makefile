@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint fmt type test check run up down logs clean
+.PHONY: help install lint fmt type test check run seed up down logs clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -29,10 +29,12 @@ test: ## Run the test suite (LocalVectorStore; no cloud deps)
 check: lint test ## Everything CI runs
 
 run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
-	uv run uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8001
+	# --all-extras keeps the embeddings (BGE) and llm (Claude/Gemini) SDKs
+	# installed; a bare `uv run` re-syncs to core deps and uninstalls them.
+	uv run --all-extras uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8001
 
 seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
-	uv run python -m scholarrag.scripts.seed
+	uv run --all-extras python -m scholarrag.scripts.seed
 
 up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
 	docker compose up -d --build

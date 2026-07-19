@@ -36,7 +36,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Populated in later phases; declared now so the layering is visible.
-llm = ["anthropic>=0.40"]
+llm = ["anthropic>=0.40", "google-genai>=1.0"]
 # Local embeddings pull in torch (large). Kept OUT of core so tests/CI stay fast
 # — they use the dependency-free FakeEmbedder. `make install` (--all-extras)
 # installs this for real embeddings locally.
@@ -100,7 +100,7 @@ ignore_missing_imports = true
 # CrossEncoder.predict) are noisy and they're installed only locally, not in CI —
 # treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
-module = ["pinecone.*", "sentence_transformers.*", "anthropic.*"]
+module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

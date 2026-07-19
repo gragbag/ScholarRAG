@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable, Iterator
+from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
 from scholarrag.db.engine import session_scope
 from scholarrag.ingestion import IngestionPipeline
+from scholarrag.pipeline import QueryEngine, build_query_engine
 from scholarrag.workers.deps import get_pipeline as _get_worker_pipeline
 from scholarrag.workers.tasks import ingest_document_task
 
@@ -44,3 +46,14 @@ def enqueue_ingestion(document_id: uuid.UUID) -> None:
 def get_enqueuer() -> Enqueuer:
     """Return the enqueue function (overridden with a spy in tests)."""
     return enqueue_ingestion
+
+
+@lru_cache
+def _cached_query_engine() -> QueryEngine:
+    """Build the query engine once (it holds long-lived retriever + LLM client)."""
+    return build_query_engine()
+
+
+def get_query_engine() -> QueryEngine:
+    """Return the process-wide RAG query engine (overridden with a fake in tests)."""
+    return _cached_query_engine()
