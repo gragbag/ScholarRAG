@@ -17,7 +17,8 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-LLMProvider = Literal["anthropic", "gemini", "openai", "ollama"]
+# "fake" = deterministic, dependency-free LLM client used in tests/CI.
+LLMProvider = Literal["anthropic", "gemini", "openai", "ollama", "fake"]
 # "fake" = deterministic, dependency-free embedder used in tests/CI.
 EmbeddingProvider = Literal["local", "fake", "openai"]
 VectorStoreKind = Literal["auto", "local", "pinecone"]
@@ -53,6 +54,11 @@ class Settings(BaseSettings):
     # Strong tier: final grounded generation with citations.
     llm_model_strong: str = "claude-sonnet-5"
     llm_max_output_tokens: int = 1024
+
+    # Query rewriting (Phase 2 Step 3): expand a query into N search variations
+    # via the cheap tier. Off by default; Step 4 wires it into the pipeline.
+    query_rewriting_enabled: bool = False
+    num_query_variations: int = 3
 
     # Optional non-default providers (wired in Phase 2).
     gemini_api_key: str | None = None

@@ -100,7 +100,7 @@ ignore_missing_imports = true
 # CrossEncoder.predict) are noisy and they're installed only locally, not in CI —
 # treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
-module = ["pinecone.*", "sentence_transformers.*"]
+module = ["pinecone.*", "sentence_transformers.*", "anthropic.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

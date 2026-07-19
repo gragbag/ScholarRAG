@@ -312,6 +312,36 @@ never load a model.)
 pass; `ruff check` + `mypy` clean. Flip `RERANKER_PROVIDER=cross_encoder` (with the
 `embeddings` extra) to feel reranking on real queries.
 
+## Step 3 — LLM provider layer + query rewriting (three functions)
+
+First time the system talks to an LLM. An `LLMClient` protocol (Claude / Fake)
+sits behind a semantic *tier* (`cheap`/`strong`), and query rewriting — the first
+*use* of it — expands a question into several search queries before retrieval.
+All three targets are hermetic (a stub `create_fn` / `FakeLLM`, no key/network).
+
+### Exercise A — `AnthropicLLM.complete` (the Messages API)
+**File:** `src/scholarrag/llm/anthropic.py` · **Target:**
+`test_anthropic_complete_maps_tier_and_extracts_text` in `tests/test_llm.py`.
+Resolve tier→model, build `messages=[{"role":"user","content":prompt}]` with
+`system` as a separate top-level kwarg, call `self._create(**kwargs)`, and join
+the `"text"` blocks of `response.content`. Do **not** pass `temperature` (Sonnet 5
+400s on it). Step-by-step in the docstring.
+
+### Exercise B — `QueryRewriter.rewrite`
+**File:** `src/scholarrag/retrieval/rewrite.py` · **Target:**
+`test_query_rewriter_includes_original_and_variations` in `tests/test_rewrite.py`.
+Render the prompt, `self._llm.complete(..., tier="cheap")`, `parse_query_list` the
+response, and return the original query first + deduped variations.
+
+### Exercise C — `parse_query_list` (LLM-output wrangling)
+**File:** `src/scholarrag/retrieval/rewrite.py` · **Target:**
+`test_parse_query_list_cleans_and_dedupes` in `tests/test_rewrite.py`.
+Split lines, strip `1. `/`2) `/`- `/`* ` numbering with a regex, drop blanks,
+dedupe preserving order.
+
+**Acceptance:** all three target tests pass; `ruff check` + `mypy` clean. Flip
+`LLM_PROVIDER=anthropic` with a real key (and the `llm` extra) to run it live.
+
 ---
 
 ## When you're done
