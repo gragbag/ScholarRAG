@@ -9,7 +9,10 @@ an API key, or a network call.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
+
+import pytest
 
 from scholarrag.config import Settings
 from scholarrag.llm import AnthropicLLM, FakeLLM, GeminiLLM, LLMClient
@@ -137,3 +140,33 @@ def test_gemini_complete_maps_tier_and_extracts_text() -> None:
     assert seen["contents"] == "Q"
     assert seen["config"]["max_output_tokens"] == 42  # type: ignore[index]
     assert seen["config"]["system_instruction"] == "be brief"  # type: ignore[index]
+
+
+class _RateLimit(Exception):
+    status_code = 429
+
+
+def test_gemini_retries_on_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _s: None)  # no real backoff wait
+    llm = GeminiLLM(_settings(), generate_fn=lambda **kw: None)
+    calls = {"n": 0}
+
+    def flaky() -> str:
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise _RateLimit("RESOURCE_EXHAUSTED; please retry in 0.1s")
+        return "ok"
+
+    assert llm._retry(flaky) == "ok"
+    assert calls["n"] == 3  # failed twice, succeeded on the third
+
+
+def test_gemini_does_not_retry_non_rate_limit_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(time, "sleep", lambda _s: None)
+    llm = GeminiLLM(_settings(), generate_fn=lambda **kw: None)
+
+    def boom() -> str:
+        raise ValueError("not a rate limit")
+
+    with pytest.raises(ValueError, match="not a rate limit"):
+        llm._retry(boom)

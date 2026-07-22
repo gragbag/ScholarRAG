@@ -19,6 +19,9 @@ from scholarrag.api.routes import documents, query
 from scholarrag.config import Settings, get_settings
 from scholarrag.corpus import available_profiles, get_corpus_profile
 from scholarrag.logging import configure_logging, get_logger
+from scholarrag.observability import configure_observability, configure_otel, is_otel_enabled
+from scholarrag.observability import flush as flush_observability
+from scholarrag.observability import is_enabled as observability_enabled
 from scholarrag.vectorstore import build_vector_store
 
 logger = get_logger(__name__)
@@ -58,7 +61,13 @@ class InfoResponse(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    settings = get_settings()
+    # Use the settings injected into create_app (app.state), NOT get_settings():
+    # tests pass hermetic settings, and re-reading the developer's .env here
+    # would flip on real telemetry mid-test-suite. (Observability itself is
+    # configured in create_app — FastAPI instrumentation must attach BEFORE the
+    # middleware stack is built; by lifespan time it's too late and the OTel
+    # middleware would silently never run.)
+    settings: Settings = app.state.settings
     configure_logging(level=settings.log_level, json_output=settings.log_json)
     logger.info(
         "startup",
@@ -66,8 +75,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         llm_provider=settings.llm_provider,
         vector_store="pinecone" if settings.use_pinecone else "local",
         corpus_profile=settings.corpus_profile,
+        observability=observability_enabled(),
+        otel=is_otel_enabled(),
     )
     yield
+    flush_observability()  # send any buffered traces before the process exits
     logger.info("shutdown")
 
 
@@ -80,6 +92,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         summary="Retrieval-Augmented Generation platform",
         lifespan=lifespan,
     )
+    app.state.settings = settings  # the lifespan (and tests) read this back
+    configure_observability(settings)  # no-op unless Langfuse keys are set
+    configure_otel(settings, app)  # must run pre-start so the middleware attaches
     app.middleware("http")(correlation_id_middleware)
 
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
@@ -144,4 +159,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     return app
 
 
-app = create_app()
+# No module-level ``app = create_app()``: uvicorn runs the factory directly
+# (``uvicorn --factory scholarrag.api.main:create_app``), so importing this
+# module has no side effects — tests never trigger real telemetry by accident.

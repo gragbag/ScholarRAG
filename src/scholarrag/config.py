@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     # what your key can access.
     gemini_model_cheap: str = "gemini-3.1-flash-lite"
     gemini_model_strong: str = "gemini-3.5-flash"
+    # Free-tier Gemini caps the strong model at ~5 req/min; the SDK doesn't retry
+    # 429s, so GeminiLLM backs off and retries this many times before giving up.
+    gemini_max_retries: int = 6
     openai_api_key: str | None = None
     ollama_base_url: str = "http://localhost:11434"
 
@@ -91,6 +94,35 @@ class Settings(BaseSettings):
     retrieval_candidate_k: int = 50  # stage-1 pool size fed to fusion/rerank
     rrf_k: int = 60  # RRF constant; larger => flatter weighting of top ranks
     retrieval_top_k: int = 5  # final chunks fed into the answer prompt (Step 4)
+
+    # -- Observability (Phase 4 Step 1) --------------------------------------
+    # Langfuse LLM tracing. All optional: tracing activates only when both keys
+    # are set (create them in the Langfuse UI at http://localhost:3001 -> project
+    # settings -> API keys) AND the `observability` extra is installed.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "http://localhost:3001"
+    # OpenTelemetry app tracing -> Jaeger (docker-compose, UI on :16686). Off
+    # until the OTLP endpoint is set (and the `observability` extra installed).
+    otel_exporter_endpoint: str | None = None  # e.g. http://localhost:4318
+    otel_service_name: str = "scholarrag"
+
+    # -- Answer cache (Phase 4 Step 2) ---------------------------------------
+    # Exact + semantic caching of final answers in Redis. A hit skips retrieval
+    # AND the LLM call. Off by default (needs Redis; flip on in .env).
+    cache_enabled: bool = False
+    cache_ttl_seconds: int = 3600  # invalidation-by-expiry; seed also clears
+    semantic_cache_enabled: bool = True  # paraphrase matching within the cache
+    semantic_cache_threshold: float = 0.93  # cosine floor; higher = fewer false hits
+
+    # -- Evaluation (Phase 3) ------------------------------------------------
+    eval_k: int = 5  # top-k cutoff for retrieval metrics
+    eval_recall_threshold: float = 0.8  # CI/report floor for Recall@k on the golden set
+    # Generation eval (Step 2): RAGAS is token-hungry, so bound the sample and
+    # throttle concurrency for the free tier.
+    eval_sample_size: int = 8  # examples per RAGAS run
+    eval_max_workers: int = 2  # RAGAS judge concurrency (lower = gentler on rate limits)
+    mlflow_tracking_uri: str | None = None  # e.g. http://localhost:5001; None = local ./mlruns
 
     # -- Infrastructure (Phase 1+) ------------------------------------------
     # Host ports are offset (5433/6380) to coexist with other local stacks; see

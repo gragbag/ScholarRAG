@@ -29,6 +29,8 @@ dependencies = [
     # Phase 1 (Step 5): async ingestion workers. [redis] pulls the Redis broker
     # client. Needed by both the API (to enqueue) and the worker (to consume).
     "celery[redis]>=5.4",
+    # Phase 4: answer cache (exact + semantic) uses redis-py directly.
+    "redis>=5",
     # Phase 2: the production vector store (serverless, free Starter tier). Only
     # used when PINECONE_API_KEY is set; CI falls back to LocalVectorStore.
     "pinecone>=5.0",
@@ -43,7 +45,29 @@ llm = ["anthropic>=0.40", "google-genai>=1.0"]
 embeddings = ["sentence-transformers>=3.0"]
 ingestion = []
 retrieval = []
-eval = []
+# Observability (Phase 4 Step 1): Langfuse LLM tracing (v2 SDK pinned to match
+# the langfuse/langfuse:2 server; v3 SDK targets a v3 server) + OpenTelemetry
+# app tracing (FastAPI/SQLAlchemy/Celery auto-instrumentation -> Jaeger via OTLP).
+observability = [
+    "langfuse>=2,<3",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+    "opentelemetry-instrumentation-celery>=0.48b0",
+]
+# Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
+# adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
+eval = [
+    "ragas>=0.2,<0.3",
+    # RAGAS 0.2 targets the langchain 0.3.x line; cap the family so the resolver
+    # doesn't pull langchain 1.x (which moved modules RAGAS still imports).
+    "langchain-core<1.0",
+    "langchain-google-genai>=2,<3",
+    "langchain-huggingface>=0.1,<0.2",
+    "mlflow>=2.16",
+    "datasets>=3.0",
+]
 
 [dependency-groups]
 dev = [
@@ -101,6 +125,20 @@ ignore_missing_imports = true
 # treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
 module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+# Eval extra (RAGAS + LangChain + MLflow): installed locally, absent in CI. The
+# ragas/langchain entries read as "unused" until the Step 2 exercises import them.
+[[tool.mypy.overrides]]
+module = [
+    "ragas.*",
+    "langchain_google_genai.*",
+    "langchain_huggingface.*",
+    "mlflow.*",
+    "langfuse.*",
+    "opentelemetry.*",
+]
 follow_imports = "skip"
 ignore_missing_imports = true
 

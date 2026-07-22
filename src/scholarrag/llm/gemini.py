@@ -14,11 +14,14 @@ response text is just ``response.text``. Thinking is disabled the Gemini way —
 
 from __future__ import annotations
 
+import re
+import time
 from collections.abc import Callable, Iterable, Iterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from scholarrag.config import Settings
 from scholarrag.llm.base import ModelTier
+from scholarrag.observability.langfuse import observe, update_current_generation
 
 if TYPE_CHECKING:  # pragma: no cover
     from google.genai import Client
@@ -26,6 +29,21 @@ if TYPE_CHECKING:  # pragma: no cover
 # Test seams mirroring the SDK calls (model=, contents=, config=).
 GenerateFn = Callable[..., Any]
 StreamFn = Callable[..., Iterable[Any]]
+
+_T = TypeVar("_T")
+# Gemini 429s embed a suggested delay ("Please retry in 26.9s").
+_RETRY_DELAY_RE = re.compile(r"retry in ([\d.]+)s", re.IGNORECASE)
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    """True for a 429 / RESOURCE_EXHAUSTED error (the google-genai SDK doesn't retry these)."""
+    return getattr(exc, "status_code", None) == 429 or "RESOURCE_EXHAUSTED" in str(exc)
+
+
+def _suggested_delay(exc: Exception, fallback: float) -> float:
+    """Honour the server's suggested retry delay if present, else use ``fallback``."""
+    match = _RETRY_DELAY_RE.search(str(exc))
+    return float(match.group(1)) + 1.0 if match else fallback
 
 
 class GeminiLLM:
@@ -68,12 +86,26 @@ class GeminiLLM:
             config["system_instruction"] = system
         return config
 
+    def _retry(self, call: Callable[[], _T]) -> _T:
+        """Call ``call``, retrying on 429 rate limits with backoff (SDK doesn't)."""
+        delay = 5.0
+        for attempt in range(self._settings.gemini_max_retries + 1):
+            try:
+                return call()
+            except Exception as exc:
+                if not _is_rate_limit(exc) or attempt == self._settings.gemini_max_retries:
+                    raise
+                time.sleep(_suggested_delay(exc, fallback=delay))
+                delay = min(delay * 2, 60.0)
+        raise AssertionError("unreachable")  # loop always returns or raises
+
     def _generate(self, **kwargs: Any) -> Any:
-        """One-shot generation — via the injected fn or the real SDK."""
+        """One-shot generation — via the injected fn or the real SDK (retried on 429)."""
         if self._generate_fn is not None:
             return self._generate_fn(**kwargs)
-        return self._client_lazy().models.generate_content(**kwargs)
+        return self._retry(lambda: self._client_lazy().models.generate_content(**kwargs))
 
+    @observe(name="gemini-complete", as_type="generation")
     def complete(
         self,
         prompt: str,
@@ -87,6 +119,21 @@ class GeminiLLM:
         config = self._config(system, max_tokens)
 
         response = self._generate(model=model, contents=prompt, config=config)
+
+        usage = getattr(response, "usage_metadata", None)
+        update_current_generation(
+            model=model,
+            input=prompt,
+            output=response.text or "",
+            usage=(
+                {
+                    "input": usage.prompt_token_count or 0,
+                    "output": usage.candidates_token_count or 0,
+                }
+                if usage is not None
+                else None
+            ),
+        )
         return response.text or ""
 
     def stream(
@@ -103,8 +150,10 @@ class GeminiLLM:
         if self._stream_fn is not None:
             chunks: Iterable[Any] = self._stream_fn(model=model, contents=prompt, config=config)
         else:
-            chunks = self._client_lazy().models.generate_content_stream(
-                model=model, contents=prompt, config=config
+            chunks = self._retry(
+                lambda: self._client_lazy().models.generate_content_stream(
+                    model=model, contents=prompt, config=config
+                )
             )
         for chunk in chunks:
             if chunk.text:

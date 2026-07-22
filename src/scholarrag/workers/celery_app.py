@@ -13,6 +13,7 @@ Run a worker with:
 from __future__ import annotations
 
 from celery import Celery
+from celery.signals import worker_process_init
 
 from scholarrag.config import get_settings
 
@@ -42,3 +43,18 @@ def create_celery() -> Celery:
 
 
 app = create_celery()
+
+
+@worker_process_init.connect  # type: ignore[untyped-decorator]  # celery's is untyped
+def _init_observability(**_kwargs: object) -> None:
+    """Configure tracing in each worker process (the API configures its own).
+
+    With OTel's Celery instrumentation active on both sides, a trace started by
+    an upload request continues into the worker that ingests the document —
+    distributed tracing across the API -> Redis -> worker hop.
+    """
+    from scholarrag.observability import configure_observability, configure_otel
+
+    settings = get_settings()
+    configure_observability(settings)
+    configure_otel(settings)  # no FastAPI app in a worker

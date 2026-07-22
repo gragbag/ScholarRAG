@@ -1,0 +1,9 @@
+The Transformer architecture replaces recurrence with self-attention. Each token
+attends to every other token in the sequence, so the model can capture long-range
+dependencies in a single layer. Multi-head attention lets the model attend to
+information from different representation subspaces at once.
+
+Because attention compares every pair of tokens, its cost grows quadratically
+with sequence length. This is why long documents are split into smaller chunks
+before they are embedded, and why chunk size is bounded by the embedding model's
+maximum context length.

@@ -1,0 +1,67 @@
+[
+  {
+    "question": "How does retrieval-augmented generation reduce hallucination compared to a bare language model?",
+    "relevant_files": ["rag.md"],
+    "reference_answer": "It retrieves passages relevant to the question and conditions generation on them, grounding the answer in source documents."
+  },
+  {
+    "question": "What is reciprocal rank fusion used for in hybrid retrieval?",
+    "relevant_files": ["rag.md"],
+    "reference_answer": "It fuses the results of dense and lexical retrieval into a single ranking."
+  },
+  {
+    "question": "What does a cross-encoder do in the retrieval pipeline?",
+    "relevant_files": ["rag.md"],
+    "reference_answer": "It reranks the top candidates for precision after fusion."
+  },
+  {
+    "question": "How does dense retrieval differ from lexical retrieval like BM25?",
+    "relevant_files": ["rag.md"],
+    "reference_answer": "Dense retrieval finds nearest neighbours by cosine similarity in vector space; lexical retrieval matches exact terms."
+  },
+  {
+    "question": "What combines a parametric language model with a non-parametric retriever?",
+    "relevant_files": ["rag.md"],
+    "reference_answer": "Retrieval-augmented generation."
+  },
+  {
+    "question": "Why does normalizing embeddings to unit length let you use a dot product for cosine similarity?",
+    "relevant_files": ["embeddings.md"],
+    "reference_answer": "For unit-length vectors the dot product equals the cosine similarity."
+  },
+  {
+    "question": "What does it mean for a retrieval model to be asymmetric?",
+    "relevant_files": ["embeddings.md"],
+    "reference_answer": "The query is prefixed with a short instruction while passages are left bare."
+  },
+  {
+    "question": "How are sentence-transformer models like BGE trained for retrieval?",
+    "relevant_files": ["embeddings.md"],
+    "reference_answer": "A query and a relevant passage are pushed together while unrelated pairs are pushed apart."
+  },
+  {
+    "question": "What does an embedding model map text into?",
+    "relevant_files": ["embeddings.md"],
+    "reference_answer": "A fixed-length vector where semantically similar texts land close together."
+  },
+  {
+    "question": "Why does the cost of self-attention grow quadratically with sequence length?",
+    "relevant_files": ["transformers.txt"],
+    "reference_answer": "Because attention compares every pair of tokens in the sequence."
+  },
+  {
+    "question": "What does multi-head attention let the model do?",
+    "relevant_files": ["transformers.txt"],
+    "reference_answer": "Attend to information from different representation subspaces at once."
+  },
+  {
+    "question": "Why are long documents split into smaller chunks before embedding?",
+    "relevant_files": ["transformers.txt"],
+    "reference_answer": "Because attention cost grows quadratically and chunk size is bounded by the embedding model's maximum context length."
+  },
+  {
+    "question": "How does the Transformer capture long-range dependencies in a single layer?",
+    "relevant_files": ["transformers.txt"],
+    "reference_answer": "Self-attention lets each token attend to every other token in the sequence."
+  }
+]

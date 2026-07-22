@@ -1,0 +1,219 @@
+[
+  {
+    "question": "What does the acronym RIM stand for in this paper?",
+    "relevant_files": [
+      "1706.04008v1.pdf"
+    ],
+    "reference_answer": "RIM stands for Recurrent Inference Machines."
+  },
+  {
+    "question": "What is the primary advantage of working solely with gradients when solving inverse problems?",
+    "relevant_files": [
+      "1706.04008v1.pdf"
+    ],
+    "reference_answer": "It avoids the need to evaluate the often intractable normalization constant of the prior probability distribution."
+  },
+  {
+    "question": "How does the RIM framework allow for across-task generalization?",
+    "relevant_files": [
+      "1706.04008v1.pdf"
+    ],
+    "reference_answer": "It allows models to be applied to new tasks by swapping the likelihood gradients while keeping the trained parameters fixed."
+  },
+  {
+    "question": "What specific type of neural network does the paper propose to design preconditioning matrices for sparse SPD systems?",
+    "relevant_files": [
+      "1906.06925v1.pdf"
+    ],
+    "reference_answer": "The paper proposes a Convolutional Neural Network (CNN) to design preconditioning matrices."
+  },
+  {
+    "question": "Why are direct methods like Cholesky decomposition generally considered infeasible for large urban water engineering problems?",
+    "relevant_files": [
+      "1906.06925v1.pdf"
+    ],
+    "reference_answer": "They scale poorly with the size of the problem in terms of both operations and memory requirements."
+  },
+  {
+    "question": "How does the CNN model ensure that the final preconditioner M-1 is Symmetric Positive Definite (SPD)?",
+    "relevant_files": [
+      "1906.06925v1.pdf"
+    ],
+    "reference_answer": "It applies a hard threshold to the diagonal output and then calculates the result using the formula M-1 = (T + D)(T + D)⊺."
+  },
+  {
+    "question": "What type of neural networks are used to construct preconditioners for Dirac normal matrices in this study?",
+    "relevant_files": [
+      "2208.02728v1.pdf"
+    ],
+    "reference_answer": "The study uses convolutional neural networks (CNNs) with sparse and dense convolutions."
+  },
+  {
+    "question": "How does the number of conjugate gradient iterations compare between neural-network preconditioned systems and unpreconditioned ones?",
+    "relevant_files": [
+      "2208.02728v1.pdf"
+    ],
+    "reference_answer": "Neural-network preconditioners reduce the number of iterations required for convergence by a factor of between two and five."
+  },
+  {
+    "question": "What is the benefit of the volume-transferring technique described in the paper?",
+    "relevant_files": [
+      "2208.02728v1.pdf"
+    ],
+    "reference_answer": "The technique allows a preconditioner trained on small lattice volumes to be used on larger volumes with minimal performance degradation, which amortizes the training cost."
+  },
+  {
+    "question": "What is the ω-condition number defined as for a positive definite matrix?",
+    "relevant_files": [
+      "2308.13195v3.pdf"
+    ],
+    "reference_answer": "The ω-condition number is defined as the ratio of the arithmetic and geometric means of the eigenvalues of a positive definite matrix."
+  },
+  {
+    "question": "How does the ω-condition number differ from the classical κ-condition number regarding inverse invariance?",
+    "relevant_files": [
+      "2308.13195v3.pdf"
+    ],
+    "reference_answer": "Unlike the classical κ-condition number, the ω-condition number is not invariant under inversion."
+  },
+  {
+    "question": "What is the primary advantage of the ω-condition number regarding differentiability on the cone of positive definite matrices?",
+    "relevant_files": [
+      "2308.13195v3.pdf"
+    ],
+    "reference_answer": "The ω-condition number is differentiable on all of the open convex cone of positive definite matrices, whereas κ is only differentiable if its largest and smallest eigenvalues are singletons."
+  },
+  {
+    "question": "What is the fundamental limitation of message-passing GNNs when approximating sparse triangular factorizations?",
+    "relevant_files": [
+      "2502.01397v3.pdf"
+    ],
+    "reference_answer": "Their inherent locality prevents them from learning non-local preconditioners where a change in one input entry affects distant outputs."
+  },
+  {
+    "question": "Why are graph transformers considered insufficient for the described task?",
+    "relevant_files": [
+      "2502.01397v3.pdf"
+    ],
+    "reference_answer": "Even completely non-local architectures fail to match the proposed baselines, indicating that the issue is an architectural mismatch rather than just an insufficient receptive field."
+  },
+  {
+    "question": "What kind of dataset did the researchers introduce to validate novel GNN architectures?",
+    "relevant_files": [
+      "2502.01397v3.pdf"
+    ],
+    "reference_answer": "They introduced a benchmark dataset consisting of synthetic and real-world matrices for which optimal sparse preconditioners exist but require non-local computations."
+  },
+  {
+    "question": "What does Kaporin’s function $B(M)$ represent for a symmetric positive definite matrix $M$?",
+    "relevant_files": [
+      "2503.22286v1.pdf"
+    ],
+    "reference_answer": "Kaporin’s function is the arithmetic mean of the eigenvalues of $M$ divided by the geometric mean of the eigenvalues."
+  },
+  {
+    "question": "Under what specific condition do the Bregman log determinant divergence and the logarithm of Kaporin’s condition number coincide?",
+    "relevant_files": [
+      "2503.22286v1.pdf"
+    ],
+    "reference_answer": "They coincide when the trace of the preconditioned matrix $AP^{-1}$ is equal to $n$."
+  },
+  {
+    "question": "What is the primary benefit of the proposed matrix-free framework for constructing preconditioners in lattice gauge theory?",
+    "relevant_files": [
+      "2509.10378v1.pdf"
+    ],
+    "reference_answer": "It avoids the computational overhead and memory usage associated with constructing or storing explicit matrices for the linear systems and their preconditioners."
+  },
+  {
+    "question": "What physical model was used as a proof of concept to demonstrate the effectiveness of the matrix-free neural preconditioner?",
+    "relevant_files": [
+      "2509.10378v1.pdf"
+    ],
+    "reference_answer": "The researchers used the Schwinger model, which is a U(1) gauge theory in 1+1 spacetime dimensions with two mass-degenerate fermions."
+  },
+  {
+    "question": "What is the zero-shot learning capability of the trained neural preconditioner models described in the paper?",
+    "relevant_files": [
+      "2509.10378v1.pdf"
+    ],
+    "reference_answer": "The models can be trained on a single lattice gauge configuration ensemble and then applied as effective preconditioners to Dirac operators of different sizes without needing further retraining."
+  },
+  {
+    "question": "What is the computational complexity of the proposed feature engineering for GNNs?",
+    "relevant_files": [
+      "2603.10277v2.pdf"
+    ],
+    "reference_answer": "The proposed feature engineering achieves O(nnz + n) complexity, where nnz is the number of non-zero elements and n is the matrix dimension."
+  },
+  {
+    "question": "How can the condition number estimate be recovered when using the hybrid formula?",
+    "relevant_files": [
+      "2603.10277v2.pdf"
+    ],
+    "reference_answer": "The condition number estimate is recovered by multiplying the exact norm of the matrix by the output of the surrogate function g(A)."
+  },
+  {
+    "question": "What is the purpose of an embedding model?",
+    "relevant_files": [
+      "embeddings.md"
+    ],
+    "reference_answer": "It maps text to a fixed-length vector so that semantically similar texts are positioned close together in vector space."
+  },
+  {
+    "question": "What happens when embeddings are normalized to unit length?",
+    "relevant_files": [
+      "embeddings.md"
+    ],
+    "reference_answer": "Cosine similarity becomes equal to a dot product, which is the format most vector databases index."
+  },
+  {
+    "question": "Why are retrieval models often designed asymmetrically?",
+    "relevant_files": [
+      "embeddings.md"
+    ],
+    "reference_answer": "Prefixing a query with a short instruction while leaving passages bare has been shown to improve search quality."
+  },
+  {
+    "question": "What is the primary function of combining a parametric language model with a non-parametric retriever?",
+    "relevant_files": [
+      "rag.md"
+    ],
+    "reference_answer": "It grounds the answer in source documents and reduces hallucination."
+  },
+  {
+    "question": "How does dense retrieval determine which passages are relevant?",
+    "relevant_files": [
+      "rag.md"
+    ],
+    "reference_answer": "It embeds text into vectors and finds nearest neighbors by cosine similarity."
+  },
+  {
+    "question": "What technique is often used to fuse dense and lexical retrieval results?",
+    "relevant_files": [
+      "rag.md"
+    ],
+    "reference_answer": "Reciprocal rank fusion is often used to fuse these retrieval methods."
+  },
+  {
+    "question": "What does the Transformer architecture use to replace recurrence?",
+    "relevant_files": [
+      "transformers.txt"
+    ],
+    "reference_answer": "The Transformer architecture replaces recurrence with self-attention."
+  },
+  {
+    "question": "What mechanism allows the model to attend to information from different representation subspaces simultaneously?",
+    "relevant_files": [
+      "transformers.txt"
+    ],
+    "reference_answer": "Multi-head attention allows the model to attend to information from different representation subspaces at once."
+  },
+  {
+    "question": "Why is the cost of attention in the Transformer architecture quadratic?",
+    "relevant_files": [
+      "transformers.txt"
+    ],
+    "reference_answer": "The cost of attention grows quadratically because it compares every pair of tokens in the sequence."
+  }
+]

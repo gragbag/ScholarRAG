@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint fmt type test check run seed up down logs clean
+.PHONY: help install lint fmt type test check run seed eval eval-gen eval-rag up down logs clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -31,10 +31,19 @@ check: lint test ## Everything CI runs
 run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
 	# --all-extras keeps the embeddings (BGE) and llm (Claude/Gemini) SDKs
 	# installed; a bare `uv run` re-syncs to core deps and uninstalls them.
-	uv run --all-extras uvicorn scholarrag.api.main:app --reload --host 0.0.0.0 --port 8001
+	uv run --all-extras uvicorn --factory scholarrag.api.main:create_app --reload --host 0.0.0.0 --port 8001
 
 seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
 	uv run --all-extras python -m scholarrag.scripts.seed
+
+eval: ## Run retrieval eval over the golden set (needs Postgres + a seeded corpus)
+	uv run --all-extras python -m scholarrag.scripts.eval
+
+eval-gen: ## Generate a synthetic eval set with the LLM (offline; costs a few tokens)
+	uv run --all-extras python -m scholarrag.scripts.gen_eval
+
+eval-rag: ## Generation eval with RAGAS + MLflow (needs seeded corpus; spends free-tier tokens)
+	uv run --all-extras python -m scholarrag.scripts.eval_rag
 
 up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
 	docker compose up -d --build

@@ -69,6 +69,14 @@ def test_extract_unsupported_content_type_raises() -> None:
         extract_text(b"whatever", "docx")
 
 
+def test_extract_text_strips_control_bytes() -> None:
+    # PDF glyph extraction emits NUL/control bytes, which Postgres text columns
+    # reject; extraction must strip them while keeping tab/newline.
+    out = extract_text(b"a\x00b\x01c\td\ne", "txt")
+    assert "\x00" not in out and "\x01" not in out
+    assert out == "abc\td\ne"  # tab and newline preserved
+
+
 def test_extract_from_path_txt() -> None:
     out = extract_text_from_path(FIXTURES / "sample.txt")
     assert "Retrieval-augmented generation" in out

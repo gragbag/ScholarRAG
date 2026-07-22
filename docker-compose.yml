@@ -101,8 +101,20 @@ services:
       NEXTAUTH_URL: http://localhost:3001
       NEXTAUTH_SECRET: local-dev-nextauth-secret-change-me
       SALT: local-dev-salt-change-me
-      ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      # Quoted: unquoted all-digit YAML scalars parse as numbers (64 zeros -> 0).
+      ENCRYPTION_KEY: "4ffab59f2094193d9010ed2f11c4241d8aeb5f14cf04e4589efbcbd63ffbf5b6"
       TELEMETRY_ENABLED: "false"
+
+  # Trace backend for OpenTelemetry (Phase 4): stores + displays app traces.
+  # UI on http://localhost:16686; ingests OTLP over HTTP on 4318.
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+      - "4318:4318" # OTLP/HTTP ingest
 
   mlflow:
     image: ghcr.io/mlflow/mlflow:v2.19.0

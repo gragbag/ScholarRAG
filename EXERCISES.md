@@ -370,6 +370,143 @@ across the lists → `answerer.answer`. The whole system in ~4 lines.
 with `LLM_PROVIDER=anthropic` + a key (and Postgres/Pinecone seeded),
 `curl -X POST localhost:8001/query -d '{"query":"..."}'` returns a cited answer.
 
+# Phase 3 exercises
+
+## Step 1 — retrieval metrics (three functions)
+
+Hand-rolled, document-level IR metrics over a ranked list of distinct filenames
+and the set of relevant filenames. `precision_at_k` is done as your template.
+All hermetic (pure functions, no deps). Order: A → B → C (any order works).
+
+### Exercise A — `recall_at_k`
+**File:** `src/scholarrag/eval/retrieval_metrics.py` · **Target:** `test_recall_at_k`.
+Fraction of relevant docs in the top-k: `len(set(ranked[:k]) & relevant) / len(relevant)`
+(guard empty relevant → 0.0).
+
+### Exercise B — `reciprocal_rank`
+**File:** same · **Target:** `test_reciprocal_rank`.
+Walk `ranked` 1-based; return `1 / position` at the first relevant hit, else 0.
+
+### Exercise C — `ndcg_at_k`
+**File:** same (add `import math`) · **Target:** `test_ndcg_at_k`.
+`DCG@k / IDCG@k` with binary gain `1 / log2(i + 1)`; IDCG puts all relevant docs
+at the top. Guard divide-by-zero.
+
+**Acceptance:** the three metric tests pass; unskip `test_retrieval_eval_meets_recall_floor`
+(the hermetic gate) and it passes too; `ruff check` + `mypy` clean. Then `make eval`
+(with a seeded corpus) prints real Recall@k / MRR / nDCG for BENCHMARKS.md.
+
+## Step 2 — generation eval with RAGAS + LangChain (two functions)
+
+Measure *answer* quality (faithfulness, answer relevancy, context precision/recall)
+with RAGAS, an LLM-as-judge framework that calls its judge through LangChain
+interfaces. Both exercises are in `src/scholarrag/eval/ragas_eval.py`; import
+`ragas`/`langchain` *inside* the functions (they live in the `eval` extra). Needs
+`uv sync --extra eval`, a seeded corpus, and a Gemini key — run via `make eval-rag`.
+
+### Exercise A — `build_judge` (LangChain)
+Wrap Gemini (`ChatGoogleGenerativeAI`, cheap tier) and BGE (`HuggingFaceEmbeddings`,
+`settings.embedding_model`) in their LangChain adapters, then in RAGAS's
+`LangchainLLMWrapper` / `LangchainEmbeddingsWrapper`. This is the LangChain moment:
+LangChain is the provider-agnostic layer RAGAS talks through.
+
+### Exercise B — `run_ragas_eval` (RAGAS)
+Turn each `GenerationSample` into a `SingleTurnSample`
+(`user_input` / `response` / `retrieved_contexts` / `reference`), wrap in an
+`EvaluationDataset`, pick the four metric instances, call
+`evaluate(dataset, metrics=, llm=, embeddings=, run_config=RunConfig(max_workers=))`,
+and average each metric column from `result.to_pandas()`.
+
+**Acceptance:** `make eval-rag` prints the four RAGAS scores and logs a run to
+MLflow. (`collect_samples` is scaffolded and covered by `test_ragas_eval.py`.)
+Then compare configs — rerank on/off, rewriting on/off — as MLflow runs.
+
+# Phase 4 exercises
+
+## Step 1 — Langfuse tracing (two instrumentation exercises)
+
+Different flavour from earlier exercises: nothing to implement from scratch —
+you *instrument* working code. The no-op-safe layer lives in
+`src/scholarrag/observability/` (safe with no keys, no extra, no server).
+Unskip each target test in `tests/test_observability.py` as you go.
+
+### Exercise A — trace the pipeline
+**File:** `src/scholarrag/pipeline/engine.py` · **Target:** `test_pipeline_stages_are_traced`.
+Import `observe` from `scholarrag.observability` and decorate `query`
+(`@observe(name="query")`), `answer_with_context` (`name="query-stream"`), and
+`_retrieve` (`name="retrieve"`). Call nesting builds the trace tree.
+
+### Exercise B — log the LLM generation with token usage
+**File:** `src/scholarrag/llm/gemini.py` · **Target:** `test_gemini_reports_usage`.
+Decorate `complete` with `@observe(name="gemini-complete", as_type="generation")`
+and, after the response, call `update_current_generation(model=..., input=...,
+output=..., usage={"input": prompt_tokens, "output": completion_tokens})` from
+`response.usage_metadata` (guard `None`). Usage is what lights up cost in the UI.
+
+**Acceptance:** both targets pass; `make check` clean. Then the live loop:
+`docker compose up -d langfuse` → create account/project at localhost:3001 →
+paste API keys into `.env` → `make run` → send a `/query` → watch the trace
+(query → retrieve → gemini-complete, with tokens) appear in the Langfuse UI.
+
+## Step 1b — OpenTelemetry app tracing (two exercises)
+
+OTel sees what Langfuse can't: HTTP requests, SQL queries, the Celery hop.
+The no-op-safe layer is `src/scholarrag/observability/otel.py`; spans ship to
+Jaeger (`docker compose up -d jaeger`, UI on localhost:16686). Off until
+`OTEL_EXPORTER_ENDPOINT` is set.
+
+### Exercise A — the OTel setup ritual
+**File:** `src/scholarrag/observability/otel.py` (`_setup_tracing`) · **Target:**
+`test_configure_otel_enables_tracing`.
+Resource (service name) → TracerProvider (set globally) → OTLP/HTTP exporter +
+BatchSpanProcessor → instrumentors (FastAPI app if present, SQLAlchemy engine,
+Celery). This same sequence is how you instrument *any* service — full guidance
+in the docstring.
+
+### Exercise B — manual spans: dense vs lexical
+**File:** `src/scholarrag/retrieval/hybrid.py` · **Target:** `test_hybrid_emits_manual_spans`.
+Fetch `get_tracer("scholarrag.retrieval")` *inside* `retrieve` (call time, not
+import time) and wrap the dense/lexical sub-retrievals in
+`tracer.start_as_current_span("retrieve.dense" / "retrieve.lexical")`. This is
+the manual API — and it answers a real question: Pinecone vs Postgres latency.
+
+**Acceptance:** both targets pass; `make check` clean. Live:
+`docker compose up -d jaeger` → set `OTEL_EXPORTER_ENDPOINT=http://localhost:4318`
+in `.env` → `make run` → send a `/query` → open localhost:16686, service
+`scholarrag`, and inspect the trace: POST /query → retrieve.dense /
+retrieve.lexical → the actual FTS `SELECT`.
+
+## Step 2 — answer caching, exact + semantic (three exercises)
+
+A cache hit skips retrieval AND the 6-12s LLM call. Two layers in Redis:
+exact (hash of query+config) and semantic (BGE cosine over previously answered
+queries, catches paraphrases). All hermetic — tests inject an in-memory
+`FakeRedis`. Files: `src/scholarrag/cache/answer_cache.py` + `pipeline/engine.py`.
+
+### Exercise A — the exact layer
+**Target:** `test_exact_cache_hit_miss_and_config_isolation` in tests/test_cache.py.
+`_exact_key`: SHA-256 of `f"{query}|{self._fingerprint}"` under `cache:exact:` —
+the fingerprint keeps answers from one config (model/top_k/reranker) from ever
+serving another. `_get_exact`: `redis.get` → `deserialize_answer` or None.
+
+### Exercise B — the semantic layer
+**Target:** `test_semantic_cache_hits_paraphrase_not_unrelated`.
+Embed the query (`embed_query`), scan `cache:semantic:*` entries, cosine = dot
+product (unit vectors), keep the best, return it only if `>= self._threshold`
+(the threshold is the false-hit guard).
+
+### Exercise C — cache-aside in the engine
+**Target:** `test_query_engine_uses_cache`.
+In `QueryEngine.query`: check `self._cache.get(query)` first (hit → return
+immediately), else run the pipeline and `put` the answer. The standard
+cache-aside pattern; guard for `self._cache is None`.
+
+**Acceptance:** all three targets pass; `make check` clean. Then live:
+`CACHE_ENABLED=true` in `.env`, restart `make run`, send the same query twice —
+the second `POST /query` trace in Jaeger collapses from seconds to milliseconds
+(no retrieve/generation spans), and Langfuse shows no second generation.
+Numbers → BENCHMARKS (cost/latency saved per hit).
+
 ---
 
 ## When you're done

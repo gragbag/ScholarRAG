@@ -32,8 +32,15 @@ Phase 1 onward._
 
 ### Retrieval metrics
 
+Reproduce with `make eval` (seed a corpus first). The harness scores the
+hybrid retriever over `data/eval/golden.json` (+ `synthetic.json` if generated);
+compare configs by toggling rerank / provider in `.env` and re-running.
+
 | Config | recall@5 | MRR | NDCG@5 | Method / date |
 |---|---|---|---|---|
+| hybrid + rerank | | | | `make eval`, _date_ |
+| hybrid, no rerank | | | | `RERANKER_PROVIDER=none`, _date_ |
+| dense only | | | | _date_ |
 | _pending_ | | | | |
 
 ### Generation quality (RAGAS)
