@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     otel_exporter_endpoint: str | None = None  # e.g. http://localhost:4318
     otel_service_name: str = "scholarrag"
 
+    # -- Guardrails (Phase 4 Step 3) -----------------------------------------
+    # Per-client-IP fixed-window rate limit on /query (Redis). Off by default;
+    # query length bounds are enforced by the request schema (3..2000 chars).
+    rate_limit_enabled: bool = False
+    rate_limit_per_minute: int = 20
+
     # -- Answer cache (Phase 4 Step 2) ---------------------------------------
     # Exact + semantic caching of final answers in Redis. A hit skips retrieval
     # AND the LLM call. Off by default (needs Redis; flip on in .env).

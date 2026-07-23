@@ -18,6 +18,7 @@ from scholarrag.api.middleware import correlation_id_middleware
 from scholarrag.api.routes import documents, query
 from scholarrag.config import Settings, get_settings
 from scholarrag.corpus import available_profiles, get_corpus_profile
+from scholarrag.guardrails import build_rate_limiter
 from scholarrag.logging import configure_logging, get_logger
 from scholarrag.observability import configure_observability, configure_otel, is_otel_enabled
 from scholarrag.observability import flush as flush_observability
@@ -93,6 +94,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.settings = settings  # the lifespan (and tests) read this back
+    # Built from the injected settings (not env), so tests stay hermetic.
+    app.state.rate_limiter = build_rate_limiter(settings)  # None when disabled
     configure_observability(settings)  # no-op unless Langfuse keys are set
     configure_otel(settings, app)  # must run pre-start so the middleware attaches
     app.middleware("http")(correlation_id_middleware)

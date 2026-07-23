@@ -21,9 +21,12 @@ def _chunk(cid: str, text: str, filename: str = "a.txt") -> RetrievedChunk:
 
 
 def test_format_sources_numbers_chunks() -> None:
+    # Format-agnostic (survives the Step 3 injection-hardening rewrite): each
+    # chunk's number, filename, and text must appear, in order.
     out = format_sources([_chunk("0", "alpha", "one.md"), _chunk("1", "beta", "two.md")])
-    assert "[1] (one.md) alpha" in out
-    assert "[2] (two.md) beta" in out
+    for fragment in ("1", "one.md", "alpha", "2", "two.md", "beta"):
+        assert fragment in out
+    assert out.index("alpha") < out.index("beta")
 
 
 # ── Exercise C — extract_citations ───────────────────────────────────────────

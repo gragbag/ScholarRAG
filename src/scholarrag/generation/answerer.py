@@ -12,6 +12,7 @@ from collections.abc import Iterator
 from scholarrag.generation.base import Answer
 from scholarrag.generation.citations import extract_citations
 from scholarrag.generation.prompts import GROUNDED_SYSTEM, render_answer_prompt
+from scholarrag.guardrails.output import enforce_grounding
 from scholarrag.llm.base import LLMClient
 from scholarrag.retrieval.base import RetrievedChunk
 
@@ -36,7 +37,7 @@ class Answerer:
 
         sources = [chunks[n - 1] for n in cited if 1 <= n <= len(chunks)]
 
-        return Answer(text=text, sources=sources)
+        return enforce_grounding(Answer(text=text, sources=sources))
 
     def answer_stream(self, query: str, chunks: list[RetrievedChunk]) -> Iterator[str]:
         """Stream the grounded answer as text deltas (citations resolved by the caller)."""
