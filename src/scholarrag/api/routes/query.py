@@ -21,7 +21,7 @@ from scholarrag.api.deps import get_db, get_query_engine
 from scholarrag.generation import cited_sources
 from scholarrag.generation.base import Answer
 from scholarrag.guardrails import sanitize_query
-from scholarrag.pipeline import QueryEngine
+from scholarrag.pipeline import AnyQueryEngine
 from scholarrag.retrieval.base import RetrievedChunk
 
 router = APIRouter(tags=["query"])
@@ -79,7 +79,7 @@ async def query_documents(
     request: QueryRequest,
     http_request: Request,
     session: Session = Depends(get_db),
-    engine: QueryEngine = Depends(get_query_engine),
+    engine: AnyQueryEngine = Depends(get_query_engine),
 ) -> QueryResponse:
     """Answer a question over the corpus, grounded in retrieved sources."""
     _check_rate_limit(http_request)
@@ -106,7 +106,7 @@ async def query_stream(
     request: QueryRequest,
     http_request: Request,
     session: Session = Depends(get_db),
-    engine: QueryEngine = Depends(get_query_engine),
+    engine: AnyQueryEngine = Depends(get_query_engine),
 ) -> StreamingResponse:
     """Stream the grounded answer token-by-token as SSE, then emit the cited sources.
 

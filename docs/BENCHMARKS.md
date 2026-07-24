@@ -4,53 +4,108 @@
 reproducible and defensible. Each entry records the baseline, the method, the
 date, and the hardware/config so the number means something.
 
-Metrics we will fill in as the phases land:
-
-- **Retrieval quality:** recall@k, MRR, NDCG@k — before/after reranking, and
-  before/after query rewriting (Phase 3).
-- **Generation quality (RAGAS):** faithfulness, answer relevancy, context
-  precision/recall (Phase 3).
-- **Latency:** p50 / p95 per query, broken down by stage (Phase 4).
-- **Cost:** median cost per query, and the % reduction from semantic caching +
-  model-tier routing (Phase 4).
-- **Ingestion throughput:** documents/min sustained by the worker pool (Phase 1).
-
 ## Environment
 
 | Field | Value |
 |---|---|
-| Recorded on | _TBD_ |
-| CPU / RAM | _TBD_ |
-| Embedding model | `BAAI/bge-small-en-v1.5` (384-dim) |
-| LLM (cheap / strong) | `claude-haiku-4-5` / `claude-sonnet-5` |
-| Corpus | _TBD_ (N documents) |
+| Recorded on | 2026-07-20 → 2026-07-22 |
+| CPU / RAM | Intel Core Ultra 7 265F (20 threads) / 16 GB — WSL2 |
+| Embedding model | `BAAI/bge-small-en-v1.5` (384-dim, local CPU) |
+| LLM (cheap / strong) | `gemini-3.1-flash-lite` / `gemini-3.5-flash` (free tier; provider swappable via `LLM_PROVIDER`) |
+| Vector store | Pinecone serverless (AWS us-east-1) + Postgres FTS (lexical) |
+| Corpus | 11 documents (8 arXiv PDFs + 3 md/txt), 253 chunks |
 
 ## Results
 
-_No measurements yet — Phase 0 is scaffolding only. Tables get populated from
-Phase 1 onward._
+### Retrieval quality
 
-### Retrieval metrics
+Method: `make eval` — hand-rolled Recall@k / MRR / nDCG@k over the labelled
+eval set (13 hand-written golden + 31 LLM-generated synthetic = 44 queries),
+document-level relevance keyed by filename, k=5.
 
-Reproduce with `make eval` (seed a corpus first). The harness scores the
-hybrid retriever over `data/eval/golden.json` (+ `synthetic.json` if generated);
-compare configs by toggling rerank / provider in `.env` and re-running.
+| Config | recall@5 | precision@5 | MRR | nDCG@5 | Method / date |
+|---|---|---|---|---|---|
+| hybrid (dense+lexical+RRF), no rerank, no rewriting | **0.977** | 0.195 | **0.905** | **0.924** | `make eval`, 2026-07-22 |
+| hybrid + cross-encoder rerank | _pending_ | | | | flip `RERANKER_PROVIDER=cross_encoder` |
+| + query rewriting (multi-query) | _pending_ | | | | flip `QUERY_REWRITING_ENABLED=true` |
 
-| Config | recall@5 | MRR | NDCG@5 | Method / date |
-|---|---|---|---|---|
-| hybrid + rerank | | | | `make eval`, _date_ |
-| hybrid, no rerank | | | | `RERANKER_PROVIDER=none`, _date_ |
-| dense only | | | | _date_ |
-| _pending_ | | | | |
+Notes: every query has exactly **one** relevant document, so precision@5 is
+capped at 1/5 = 0.2 — the measured 0.195 means the relevant doc was found in the
+top-5 for ~98% of queries (it mirrors recall, not noise). MRR 0.905 = the right
+document ranks #1 for the large majority of queries.
 
 ### Generation quality (RAGAS)
 
+Method: `make eval-rag` — full pipeline over 8 eval examples; judge =
+`gemini-3.1-flash-lite` + BGE embeddings via LangChain wrappers; logged to
+MLflow (experiment `scholarrag-generation-eval`).
+
 | Config | Faithfulness | Answer relevancy | Context precision | Context recall | Date |
 |---|---|---|---|---|---|
-| _pending_ | | | | | |
+| **hand-rolled** pipeline, no rerank, no rewriting, gen=`gemini-3.5-flash` | **0.979** | 0.932 | 0.937 | 1.000 | 2026-07-20 |
+| **LangChain (LCEL)** pipeline, same config (`PIPELINE=langchain`) | **0.979** | 0.929 | 0.929 | 1.000 | 2026-07-23 |
 
-### Latency & cost
+Note: LLM-as-judge scores are directional, not gospel (judge noise is a known
+limitation); faithfulness 0.979 over 8 examples ≈ answers are almost entirely
+supported by retrieved context.
 
-| Config | p50 (ms) | p95 (ms) | Cost/query | Date |
-|---|---|---|---|---|
-| _pending_ | | | | |
+#### Pipeline A/B verdict (hand-rolled vs LangChain/LCEL)
+
+Same retriever object, same prompts, same model config in both pipelines — the
+A/B isolates the orchestration/generation glue. Findings (2026-07-23):
+
+- **Quality parity.** Identical faithfulness (0.979); deltas of 0.003–0.008 on
+  the other metrics over 8 examples are within judge noise. A live side-by-side
+  query cited the same source with equivalent answers in both pipelines.
+- **Latency:** not distinguishable — retrieval is shared by construction and
+  Gemini free-tier variance (±6 s) dwarfs the glue layer. Single-sample timings
+  (31.9 s vs 17.3 s) reflect cold-start asymmetry, not the framework.
+- **What LangChain bought:** streaming came free from `chain.stream` (the
+  hand-rolled path needed protocol + Answerer methods for the same feature);
+  the generation glue is fewer lines.
+- **What it cost:** cross-cutting policy (citation mapping, grounding gate,
+  cache-aside) had to be consciously re-attached to the second pipeline; the
+  LangChain path is currently **invisible to Langfuse** (it bypasses our
+  instrumented `GeminiLLM` — fixing it needs LangChain's callback handler); and
+  the dependency is pinned to the langchain 0.3 line by RAGAS compatibility.
+- **Decision (2026-07-23): `langchain` is now the default pipeline** — quality
+  parity being established, the LCEL path was promoted as the on-ramp to the
+  Phase 5 agentic (LangGraph) work. The hand-rolled baseline stays toggleable
+  (`PIPELINE=handrolled`) for comparison. Known gap inherited by the new
+  default: LC-path generations are not yet visible in Langfuse (callback
+  handler planned with Phase 5).
+
+### Latency (by stage) & tokens
+
+Method: OpenTelemetry traces in Jaeger (`POST /query` spans), Langfuse
+generations for token counts. Measured 2026-07-22 against the live stack.
+
+| Stage | Cold (first request) | Warm | Notes |
+|---|---|---|---|
+| `retrieve.dense` (BGE + Pinecone) | 6.70 s | **0.56–0.73 s** | cold = one-time BGE model load (~130 MB) |
+| `retrieve.lexical` (Postgres FTS) | 24 ms | **9–10 ms** | actual `SELECT` ≈ 4.6 ms |
+| generation (`gemini-3.5-flash`) | — | **≈ 6–12 s** | dominates total; high variance on free tier |
+| `POST /query` total | 16.4 s | 7.3–13.3 s | |
+
+Tokens per query (Langfuse, one representative query): **2,483 in / 45 out** —
+RAG is input-dominated (~55:1), so `top_k` × chunk size is the main cost lever.
+
+### Caching (exact + semantic answer cache, Redis)
+
+Method: in-process timing of `QueryEngine.query`, same stack as the API,
+2026-07-22. Threshold 0.93 (cosine, BGE).
+
+| Scenario | Latency | LLM tokens spent |
+|---|---|---|
+| cache miss (full pipeline, cold) | 32.6 s | ~2.5 K |
+| exact repeat of the same query | **< 1 ms** | 0 |
+| paraphrase (semantic hit) | **6 ms** | 0 |
+
+All three returned the identical answer. A cache hit removes ~100% of token
+cost and >99.9% of latency; `make seed` invalidates the cache on corpus change.
+
+### Ingestion throughput
+
+| Config | docs/min | Date |
+|---|---|---|
+| _pending_ — measure with the Celery worker over the 8-PDF corpus | | |

@@ -24,6 +24,8 @@ EmbeddingProvider = Literal["local", "fake", "openai"]
 VectorStoreKind = Literal["auto", "local", "pinecone"]
 # "none" = fusion only (no rerank); "fake" = deterministic torch-free reranker.
 RerankerProvider = Literal["cross_encoder", "fake", "none"]
+# Which query-pipeline implementation serves /query (A/B'd via the eval harness).
+PipelineKind = Literal["handrolled", "langchain", "agentic"]
 
 
 class Settings(BaseSettings):
@@ -106,6 +108,16 @@ class Settings(BaseSettings):
     # until the OTLP endpoint is set (and the `observability` extra installed).
     otel_exporter_endpoint: str | None = None  # e.g. http://localhost:4318
     otel_service_name: str = "scholarrag"
+
+    # -- Pipeline implementation (post-MVP) ----------------------------------
+    # "handrolled" = the Phase 2 QueryEngine; "langchain" = the LCEL rewrite.
+    # A/B'd 2026-07-23 (BENCHMARKS.md): quality parity. langchain is now the
+    # default as the on-ramp to the Phase 5 agentic (LangGraph) work; the
+    # hand-rolled baseline stays toggleable.
+    pipeline: PipelineKind = "langchain"
+    # Agentic pipeline (Phase 5): hard cap on the rewrite/retry loop — every
+    # iteration spends more free-tier LLM calls, so bounded by design.
+    max_agent_iterations: int = 2
 
     # -- Guardrails (Phase 4 Step 3) -----------------------------------------
     # Per-client-IP fixed-window rate limit on /query (Redis). Off by default;

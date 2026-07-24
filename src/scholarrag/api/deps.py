@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from scholarrag.db.engine import session_scope
 from scholarrag.ingestion import IngestionPipeline
-from scholarrag.pipeline import QueryEngine, build_query_engine
+from scholarrag.pipeline import AnyQueryEngine, build_query_engine
 from scholarrag.workers.deps import get_pipeline as _get_worker_pipeline
 from scholarrag.workers.tasks import ingest_document_task
 
@@ -49,11 +49,11 @@ def get_enqueuer() -> Enqueuer:
 
 
 @lru_cache
-def _cached_query_engine() -> QueryEngine:
+def _cached_query_engine() -> AnyQueryEngine:
     """Build the query engine once (it holds long-lived retriever + LLM client)."""
     return build_query_engine()
 
 
-def get_query_engine() -> QueryEngine:
+def get_query_engine() -> AnyQueryEngine:
     """Return the process-wide RAG query engine (overridden with a fake in tests)."""
     return _cached_query_engine()

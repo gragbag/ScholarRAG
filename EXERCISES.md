@@ -538,6 +538,78 @@ mitigation — honest position: no complete defense exists (OWASP LLM01).
 `RATE_LIMIT_ENABLED=true` + 25 rapid curls → the last ones 429; ask a question
 your corpus can't answer → the refusal message, never a confident guess.
 
+# Post-MVP exercises
+
+## LangChain rewrite (three exercises)
+
+A second pipeline implementation on LCEL behind the same interface, toggled by
+`PIPELINE=langchain`. Retrieval + cache are the *same objects* as the hand-rolled
+path (that's what keeps the A/B honest); LangChain replaces the glue. Files:
+`src/scholarrag/pipeline/langchain_engine.py` + the toggle in `pipeline/__init__.py`.
+Tests are hermetic via LangChain's `FakeListChatModel` (skip in CI — `langchain`
+extra). Run `uv sync --all-extras` first.
+
+### Exercise A — the LCEL chain (`_build_chain`)
+**Target:** `test_chain_composes_and_generates`.
+`ChatPromptTemplate.from_messages([("system", GROUNDED_SYSTEM), ("human", ...)])`
+`| self._llm | StrOutputParser()` — runnables composing with `|`. The composed
+chain is itself a Runnable: `.invoke` and `.stream` come free.
+
+### Exercise B — re-attach the policy (`_to_answer`)
+**Target:** `test_to_answer_maps_citations_and_gates`.
+Chain output is a raw string; your existing machinery re-applies:
+`extract_citations` → map to chunks → `enforce_grounding` → `Answer`. The
+lesson: cross-cutting policy must be re-attached to every new pipeline.
+
+### Exercise C — streaming + the toggle (`stream` + `build_query_engine`)
+**Targets:** `test_stream_yields_deltas`, `test_toggle_builds_langchain_engine`.
+`self._chain.stream({...})` yields text deltas through the whole graph — the
+hand-rolled path needed protocol methods for this; LCEL gives it free. Then wire
+the `PIPELINE=langchain` branch in `build_query_engine` (guidance in place).
+
+**Acceptance:** all four targets pass; `make check` clean. Then the A/B:
+`PIPELINE=langchain` in `.env` → re-run `make eval` + `make eval-rag` (new
+MLflow runs) + a few Jaeger-traced queries → record both configs side by side
+in BENCHMARKS.md and write the verdict.
+
+# Phase 5 exercises
+
+## Step 1 — the agent graph (LangGraph; three exercises)
+
+One agent, four nodes, two decisions: `retrieve -> grade -> (rewrite loop) ->
+generate -> answer-check`. File: `src/scholarrag/pipeline/agentic_engine.py`;
+toggle `PIPELINE=agentic`. Scaffolded: state, retrieve/rewrite/generate nodes,
+the engine (cache-aside, gate, buffer-then-stream), the toggle, Langfuse
+callbacks for all LC-model calls. Tests are hermetic *trajectory* tests
+(scripted fake deciders + a recording retriever) — testing an agent means
+testing its decisions, not its prose. `uv sync --all-extras` first; targets in
+tests/test_agentic_engine.py.
+
+### Exercise A — the graph (`_build_graph`)
+**Target:** `test_happy_path_is_two_llm_calls`.
+`StateGraph(AgentState)` -> `add_node` x4 -> fixed edges (START->retrieve->grade,
+rewrite->retrieve = the cycle) -> `add_conditional_edges` on grade and generate
+-> `compile()`. The core LangGraph ritual.
+
+### Exercise B — the grader + its routing (`_node_grade`, `_route_after_grade`)
+**Targets:** `test_weak_retrieval_triggers_rewrite_loop`,
+`test_always_weak_stops_at_the_cap_and_answers_best_effort`.
+Cheap-tier one-word verdict (mind the parse: "not relevant" CONTAINS "relevant"
+— check "weak" first; fail OPEN so a confused grader can't burn the budget).
+Routing: relevant OR budget spent -> "generate"; else -> "rewrite".
+
+### Exercise C — self-correction (`_route_after_generate`)
+**Targets:** `test_uncited_answer_retries_then_gate_refuses`,
+`test_honest_refusal_ends_without_retry`.
+Deterministic and free: cited or honest refusal -> END; uncited + budget left ->
+"rewrite" (full loop for better evidence); budget spent -> END (the gate
+refuses downstream). Your citation machinery IS the groundedness signal.
+
+**Acceptance:** all five agentic tests pass; `make check` clean. Then live:
+`PIPELINE=agentic` -> ask something obliquely phrased -> watch the loop in
+Jaeger/Langfuse (grade/rewrite spans). Step 2 measures agentic vs langchain on
+hard questions.
+
 ---
 
 ## When you're done

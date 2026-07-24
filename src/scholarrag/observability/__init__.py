@@ -10,6 +10,7 @@ from __future__ import annotations
 from scholarrag.observability.langfuse import (
     configure_observability,
     flush,
+    get_langchain_callbacks,
     is_enabled,
     observe,
     update_current_generation,
@@ -21,6 +22,7 @@ __all__ = [
     "configure_observability",
     "configure_otel",
     "flush",
+    "get_langchain_callbacks",
     "get_tracer",
     "is_enabled",
     "is_otel_enabled",

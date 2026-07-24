@@ -56,6 +56,14 @@ observability = [
     "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
     "opentelemetry-instrumentation-celery>=0.48b0",
 ]
+# Post-MVP: the LangChain pipeline implementation (toggleable vs hand-rolled).
+# Same 0.3-line pins as `eval` (RAGAS compatibility) — see that comment.
+langchain = [
+    "langchain-core<1.0",
+    "langchain-google-genai>=2,<3",
+]
+# Phase 5: the agentic pipeline (LangGraph state machine over the LCEL pieces).
+agentic = ["langgraph>=1,<2"]
 # Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
 # adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
 eval = [
@@ -133,11 +141,13 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
     "ragas.*",
+    "langchain_core.*",
     "langchain_google_genai.*",
     "langchain_huggingface.*",
     "mlflow.*",
     "langfuse.*",
     "opentelemetry.*",
+    "langgraph.*",
 ]
 follow_imports = "skip"
 ignore_missing_imports = true
@@ -151,4 +161,9 @@ addopts = "-ra -q"
 filterwarnings = [
     "error",
     "ignore::starlette.exceptions.StarletteDeprecationWarning",
+    # langgraph 1.x on the pinned langchain-core 0.3 line trips a pending-
+    # deprecation warning at import time — third-party noise, not ours.
+    # (Message-based, NOT class-based: the class form would make pytest try to
+    # import langchain_core, which is absent in CI's core-only environment.)
+    "ignore:The default value of `allowed_objects` will change",
 ]

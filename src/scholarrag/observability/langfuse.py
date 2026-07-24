@@ -121,3 +121,25 @@ def flush() -> None:
     from langfuse.decorators import langfuse_context
 
     langfuse_context.flush()
+
+
+def get_langchain_callbacks(settings: Settings) -> list[Any]:
+    """Langfuse's LangChain callback handler (or ``[]`` when tracing is off).
+
+    The LangChain/LangGraph pipelines bypass our instrumented ``GeminiLLM``, so
+    their generations would be invisible to Langfuse. Attaching this handler to
+    the LangChain chat models restores per-generation tokens/latency there.
+    """
+    if not (settings.langfuse_public_key and settings.langfuse_secret_key):
+        return []
+    try:
+        from langfuse.callback import CallbackHandler
+    except ImportError:  # observability extra not installed
+        return []
+    return [
+        CallbackHandler(
+            public_key=settings.langfuse_public_key,
+            secret_key=settings.langfuse_secret_key,
+            host=settings.langfuse_host,
+        )
+    ]

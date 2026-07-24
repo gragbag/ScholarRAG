@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from scholarrag.config import Settings
 from scholarrag.eval.dataset import EvalExample
-from scholarrag.pipeline import QueryEngine
+from scholarrag.pipeline import AnyQueryEngine
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +34,7 @@ class GenerationSample:
 
 
 def collect_samples(
-    engine: QueryEngine, session: Session, examples: list[EvalExample]
+    engine: AnyQueryEngine, session: Session, examples: list[EvalExample]
 ) -> list[GenerationSample]:
     """Run the full pipeline over each example, capturing answer + contexts."""
     samples: list[GenerationSample] = []

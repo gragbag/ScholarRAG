@@ -46,6 +46,7 @@ def main() -> None:  # pragma: no cover - manual entry point
 
     log_ragas_run(
         params={
+            "pipeline": settings.pipeline,  # handrolled vs langchain — the A/B axis
             "judge_model": settings.gemini_model_cheap,
             "generator_model": settings.gemini_model_strong,
             "reranker": settings.reranker_provider,
