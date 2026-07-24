@@ -33,6 +33,9 @@ run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
 	# installed; a bare `uv run` re-syncs to core deps and uninstalls them.
 	uv run --all-extras uvicorn --factory scholarrag.api.main:create_app --reload --host 0.0.0.0 --port 8001
 
+ui: ## Launch the Streamlit chat UI (needs the API running — `make run` — in another terminal)
+	uv run --all-extras streamlit run src/scholarrag/ui/app.py
+
 seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
 	uv run --all-extras python -m scholarrag.scripts.seed
 

@@ -1,0 +1,42 @@
+# Keep the build context small and secrets/data OUT of the image.
+# The Dockerfile only COPYs pyproject.toml, uv.lock, src/, and README.md —
+# everything else here is noise or must never be baked into a shared image.
+
+# Secrets — never bake .env into an image (it ships to every registry pull).
+.env
+.env.*
+!.env.example
+
+# Local databases / state
+*.db
+mlflow.db
+
+# The corpus (large PDFs) — loaded into Postgres at seed time, not read from
+# the image. Keep it out of the build context.
+data/
+
+# Python / tooling caches and the local venv (rebuilt inside the image)
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Repo metadata and things the runtime doesn't need
+.git/
+.github/
+.gitignore
+tests/
+docs/
+deploy/
+EXERCISES.md
+*.md
+!README.md
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store

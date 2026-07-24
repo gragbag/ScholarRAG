@@ -88,6 +88,25 @@ services:
       redis:
         condition: service_healthy
 
+  ui:
+    # Same image as api/worker — ONE image, THREE roles. Here it overrides the
+    # image's default CMD (uvicorn) to run Streamlit instead.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: streamlit run src/scholarrag/ui/app.py --server.port 8501 --server.address 0.0.0.0
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SCHOLARRAG_API_URL: http://api:8000 # TODO: fix me
+      # ─────────────────────────────────────────────────────────────────────
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+
   langfuse:
     image: langfuse/langfuse:2
     restart: unless-stopped

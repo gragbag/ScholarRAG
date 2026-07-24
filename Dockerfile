@@ -11,18 +11,26 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 
+# The extras the running services actually need. ONE image, THREE roles: the same
+# venv runs uvicorn (API), the Celery worker, or Streamlit (UI), so it must carry
+# the union of their deps — embeddings + llm + langchain + agentic + ui +
+# observability. `eval` (ragas/mlflow/datasets) is dev/CI-only and deliberately
+# left out to keep the image lean. Without these, the image ModuleNotFounds at
+# query time (the "uv strips extras" gotcha, baked in).
+ARG EXTRAS="--extra llm --extra embeddings --extra langchain --extra agentic --extra ui --extra observability"
+
 WORKDIR /app
 
 # Install dependencies first (cached layer), without the project itself.
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev ${EXTRAS}
 
 # Now install the project.
 COPY src ./src
 COPY README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev ${EXTRAS}
 
 
 FROM python:3.12-slim AS runtime

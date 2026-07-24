@@ -42,7 +42,9 @@ llm = ["anthropic>=0.40", "google-genai>=1.0"]
 # Local embeddings pull in torch (large). Kept OUT of core so tests/CI stay fast
 # — they use the dependency-free FakeEmbedder. `make install` (--all-extras)
 # installs this for real embeddings locally.
-embeddings = ["sentence-transformers>=3.0"]
+# torch is declared explicitly (not just pulled in by sentence-transformers) so
+# the CPU-only index pin in [tool.uv.sources] below actually binds to it.
+embeddings = ["sentence-transformers>=3.0", "torch>=2.2"]
 ingestion = []
 retrieval = []
 # Observability (Phase 4 Step 1): Langfuse LLM tracing (v2 SDK pinned to match
@@ -64,6 +66,10 @@ langchain = [
 ]
 # Phase 5: the agentic pipeline (LangGraph state machine over the LCEL pieces).
 agentic = ["langgraph>=1,<2"]
+# Phase 6: the Streamlit chat UI. A thin HTTP client over the API (httpx is
+# already core), so only Streamlit itself is optional. Kept out of CI — the
+# testable client logic in scholarrag.ui.client needs no extra.
+ui = ["streamlit>=1.40,<2"]
 # Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
 # adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
 eval = [
@@ -85,6 +91,19 @@ dev = [
     "pytest-asyncio>=0.24",
     "pre-commit>=4.0",
 ]
+
+# PyTorch ships a CUDA build by default (~4 GB of nvidia/triton libs pulled in
+# transitively via sentence-transformers). We run BGE embeddings on CPU only, so
+# source torch from its CPU-only wheel index instead — this drops the container
+# image from ~6 GB to ~2 GB. `explicit = true` scopes the index to torch alone;
+# every other package still resolves from PyPI.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
@@ -148,6 +167,7 @@ module = [
     "langfuse.*",
     "opentelemetry.*",
     "langgraph.*",
+    "streamlit.*",
 ]
 follow_imports = "skip"
 ignore_missing_imports = true

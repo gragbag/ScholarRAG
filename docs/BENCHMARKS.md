@@ -118,10 +118,33 @@ requests/day and a full run needs ~22 generate calls — it cannot complete on f
 tier. Both pipelines use flash-lite identically, so the A-vs-B comparison is fair;
 only cross-comparison to the RAGAS rows above (which used flash) is affected.
 
-| Pipeline | answered (answerable) | false answers (controls) | source-hit | calls/query | latency | Date |
+| Pipeline | answered (answerable) | false answers (controls) | source-hit | calls/query | latency¹ | Date |
 |---|---|---|---|---|---|---|
-| langchain (single-shot) | _pending_ | | | | | |
-| agentic (grade+retry) | _pending_ | | | | | |
+| langchain (single-shot) | 0.88 (7/8) | **0.00** | 0.88 | **1.0** | 2.4 s | 2026-07-23 |
+| agentic (grade+retry) | **1.00 (8/8)** | **0.00** | 0.88 | **5.3** | 29.9 s¹ | 2026-07-23 |
+
+¹ Latency is **rate-limit-contaminated, not intrinsic**: at 5.3 calls/query the agentic
+run saturates flash-lite's 15 RPM cap and sleeps ~15 s per throttle. Read `calls/query`
+(5.3× vs 1.0×), not wall-clock, as the true cost signal for H3.
+
+**Verdict (n=11; 8 answerable + 3 controls; flash-lite generation):**
+
+- **H1 — refusal recovery: confirmed.** The single-shot pipeline refused one
+  answerable question (0.88); the agentic grade-and-retry loop recovered it to
+  **1.00**. That is the whole thesis of agentic RAG — a weak first retrieval gets
+  graded "weak", the query is rewritten, retrieval retried, and the answer found.
+- **H2 — controls stay refused: confirmed for BOTH.** False-answer rate on the 3
+  unanswerable controls is **0.00** in both pipelines. This is the non-obvious win:
+  a naive retry loop could keep rewriting until it *forces* an ungrounded answer;
+  ours grades, exhausts its budget, and correctly **refuses** — retrying did not
+  cost us on the questions that *should* be refused.
+- **H3 — cost: steep.** Recovery costs **5.3× the model calls** (5.3 vs 1.0 per
+  query). The agentic path is worth it when a refused-but-answerable question is
+  expensive (research, high-stakes lookups) and not when latency/cost dominate.
+- **Nuance — source-hit unchanged at 0.88.** The one question agentic *recovered*
+  was answered but cited a file outside the labelled relevant set (source-hit
+  stayed 7/8, not 8/8) — the multi-hop question had a defensible alternate source.
+  Recovery restored an *answer*, not necessarily the labelled evidence.
 
 ### Ingestion throughput
 

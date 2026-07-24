@@ -638,6 +638,75 @@ minutes). Record both reports + the verdict on H1/H2/H3 in BENCHMARKS.md.
 
 ---
 
+# Phase 6 — Streamlit chat UI
+
+The UI is a **thin HTTP client** over the FastAPI backend (`src/scholarrag/ui/`).
+All three exercises live in the *testable* client layer (`client.py`); the
+Streamlit script (`app.py`) is scaffolded glue, not tested. `httpx` is core, so
+these tests run in CI with no extra. Targets are in `tests/test_ui_client.py`.
+
+### Exercise 1 — `parse_sse_stream`
+**Target:** `test_parse_sse_stream`.
+Parse the backend's Server-Sent-Event lines (`data: {json}`) into typed
+`SSEEvent`s — the consuming end of the format you already *emit* in
+`api/routes/query.py`. Skip blank/non-`data:` lines; `json.loads` the rest.
+
+### Exercise 2 — `ScholarRAGClient.query`
+**Targets:** `test_query_returns_answer`, `test_query_maps_rate_limit`.
+The non-streaming `POST /query`. The lesson is the *client boundary*: turn raw
+HTTP into typed objects (`Answer`/`Source`) and typed errors — map 429 →
+`RateLimited`, `ConnectError` → `BackendUnavailable` — so the UI never sees a
+status code.
+
+### Exercise 3 — `iter_answer_tokens`
+**Targets:** `test_iter_answer_tokens`, `test_iter_answer_tokens_flags_ungrounded`.
+The bridge to `st.write_stream`: yield `token` text live, and stash the later
+`sources` event into the `StreamSink` (an empty sources list means ungrounded —
+the backend's post-hoc signal, since streamed tokens can't be un-sent).
+
+**Acceptance:** all five targets pass; `make check` clean. Then run it:
+`make run` (backend, terminal 1) + `make ui` (Streamlit, terminal 2) → ask a
+question and watch the answer stream in with its cited sources.
+
+---
+
+# Phase 7 — Deploy (Docker → k8s → Helm → Terraform)
+
+No pytest here — this phase is YAML/HCL, verified by commands (`docker compose
+config`, pods reaching Ready, `helm lint`, `terraform validate`).
+
+## Step 1 — Production containers
+
+Scaffolded for you: the `Dockerfile` now installs the runtime **extras** (one
+image, three roles — API/worker/UI share a venv), a `.dockerignore` keeps
+secrets/data out of the image, and the `ui` service is added to
+`docker-compose.yml`.
+
+### Exercise — compose networking (`docker-compose.yml`, the `ui` service)
+**Target:** the UI container can reach the API. The `SCHOLARRAG_API_URL` for the
+`ui` service is set to `http://localhost:8001` **on purpose — it's wrong**. Two
+reasons: inside the `ui` container `localhost` is the *ui container itself*, not
+the api; and `8001` is the **host** port mapping (`"8001:8000"`), which doesn't
+exist on the compose network. Fix it to reach the `api` service by its **service
+name** and **container** port.
+
+This is the same idea you'll meet again in k8s (Services get DNS names) — so it's
+worth internalizing now: *containers talk to each other by service name + the
+container's own port, never `localhost` and never the host-mapped port.*
+
+**Verify:**
+```
+docker compose up -d --build postgres redis api ui
+# open http://localhost:8501, ask a question — it should reach the backend
+docker compose logs ui        # no connection errors
+```
+(Generation uses your flash-lite `.env` override, so no daily-quota wall.)
+
+**Acceptance:** `docker compose config` valid, the api image builds, and the UI
+in a container answers a question through the api container.
+
+---
+
 ## When you're done
 
 Show me your diffs (or just say "done") and I'll review before the next step.

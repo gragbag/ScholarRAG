@@ -72,7 +72,6 @@ def test_is_grounded_answer_distinguishes_refusals() -> None:
     )
 
 
-# ── Exercise A — the scoring function ────────────────────────────────────────
 def test_score_results_separates_populations() -> None:
     results = [
         # answerable, answered, cited the right file -> counts for H1 and source-hit
@@ -92,7 +91,6 @@ def test_score_results_separates_populations() -> None:
     assert report.n_unanswerable == 1
 
 
-# ── Exercise B — the counting callback ───────────────────────────────────────
 def test_counting_callback_counts_model_calls() -> None:
     from langchain_core.language_models import FakeListChatModel
     from langchain_core.output_parsers import StrOutputParser
