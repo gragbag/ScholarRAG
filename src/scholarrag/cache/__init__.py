@@ -24,6 +24,7 @@ def _config_fingerprint(settings: Settings) -> str:
     return "|".join(
         str(v)
         for v in (
+            settings.pipeline,  # handrolled/langchain/agentic answers must not cross-serve
             settings.llm_provider,
             settings.llm_model_strong,
             settings.gemini_model_strong,

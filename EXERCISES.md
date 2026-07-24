@@ -610,6 +610,32 @@ refuses downstream). Your citation machinery IS the groundedness signal.
 Jaeger/Langfuse (grade/rewrite spans). Step 2 measures agentic vs langchain on
 hard questions.
 
+## Step 2 — measuring the agent (two exercises)
+
+Deterministic agentic-vs-single-shot comparison on the hard set
+(`data/eval/hard.json` — oblique rephrasings, multi-hop comparisons, and 3
+unanswerable refusal-controls; authored from existing labels and verified
+against the extracted paper text — review it!). No RAGAS: the hypotheses are
+binary and a judge would add noise, cost, and refusal-scoring confusion. Files:
+`src/scholarrag/eval/compare.py`; runner `make eval-agentic`.
+
+### Exercise A — the scoring function (`score_results`)
+**Target:** `test_score_results_separates_populations`.
+The subtlety: answerable and unanswerable questions feed DIFFERENT metrics —
+answered_rate over answerable (H1), false_answer_rate over controls (H2, must
+stay 0), source-hit over answerable (unanswered = miss), calls/latency over all.
+
+### Exercise B — the counting callback (`CountingCallback`)
+**Target:** `test_counting_callback_counts_model_calls`.
+Subclass `BaseCallbackHandler`, count `on_chat_model_start` — the same
+mechanism the Langfuse handler uses, demystified. NB: LangChain swallows
+callback exceptions by default, so the stub silently undercounts (the test
+catches it) — a broken tracer must never break the app.
+
+**Acceptance:** both targets pass; `make check` clean. Then the measurement:
+`make eval-agentic` (background it — two pipelines x 11 questions, rate-limited
+minutes). Record both reports + the verdict on H1/H2/H3 in BENCHMARKS.md.
+
 ---
 
 ## When you're done

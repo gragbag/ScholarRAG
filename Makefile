@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint fmt type test check run seed eval eval-gen eval-rag up down logs clean
+.PHONY: help install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -44,6 +44,9 @@ eval-gen: ## Generate a synthetic eval set with the LLM (offline; costs a few to
 
 eval-rag: ## Generation eval with RAGAS + MLflow (needs seeded corpus; spends free-tier tokens)
 	uv run --all-extras python -m scholarrag.scripts.eval_rag
+
+eval-agentic: ## Agentic vs single-shot on the hard set (both pipelines; slow, rate-limited)
+	uv run --all-extras python -m scholarrag.scripts.eval_agentic
 
 up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
 	docker compose up -d --build

@@ -104,6 +104,25 @@ Method: in-process timing of `QueryEngine.query`, same stack as the API,
 All three returned the identical answer. A cache hit removes ~100% of token
 cost and >99.9% of latency; `make seed` invalidates the cache on corpus change.
 
+### Agentic vs single-shot (the hard set)
+
+Method: `make eval-agentic` — both pipelines over `data/eval/hard.json`
+(8 answerable: oblique rephrasings + multi-hop; 3 unanswerable refusal-controls).
+Deterministic metrics, no LLM judge (binary hypotheses; judge noise would swamp
+n=11). Hypotheses: H1 agentic recovers refusals on hard answerable questions;
+H2 false-answer rate on controls stays 0 for both; H3 the cost multiplier.
+
+**Generation model:** `gemini-3.1-flash-lite` (cheap tier), *not* the `gemini-3.5-flash`
+used elsewhere in this doc. Reason: the strong model is free-tier-capped at 20
+requests/day and a full run needs ~22 generate calls — it cannot complete on free
+tier. Both pipelines use flash-lite identically, so the A-vs-B comparison is fair;
+only cross-comparison to the RAGAS rows above (which used flash) is affected.
+
+| Pipeline | answered (answerable) | false answers (controls) | source-hit | calls/query | latency | Date |
+|---|---|---|---|---|---|---|
+| langchain (single-shot) | _pending_ | | | | | |
+| agentic (grade+retry) | _pending_ | | | | | |
+
 ### Ingestion throughput
 
 | Config | docs/min | Date |

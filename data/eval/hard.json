@@ -1,0 +1,65 @@
+[
+  {
+    "question": "If every vector is scaled to length one before it goes into the index, what does that buy you when comparing them later?",
+    "relevant_files": ["embeddings.md"],
+    "answerable": true,
+    "reference_answer": "Normalizing embeddings to unit length makes cosine similarity equal to a dot product, which is what most vector databases index."
+  },
+  {
+    "question": "What makes processing very long texts so computationally expensive for this architecture, and what practical preprocessing habit follows from that?",
+    "relevant_files": ["transformers.txt"],
+    "answerable": true,
+    "reference_answer": "Attention compares every pair of tokens so its cost grows quadratically with sequence length, which is why long documents are split into smaller chunks before embedding."
+  },
+  {
+    "question": "Why run two different search engines under the hood instead of relying on the semantic one alone?",
+    "relevant_files": ["rag.md"],
+    "answerable": true,
+    "reference_answer": "Dense retrieval captures semantic meaning while lexical retrieval matches exact terms; hybrid retrieval fuses both and reranks for precision."
+  },
+  {
+    "question": "Can a model trained on a small physical system be reused on a much bigger one without retraining, according to the lattice results?",
+    "relevant_files": ["2208.02728v1.pdf"],
+    "answerable": true,
+    "reference_answer": "Yes — the volume-transferring technique lets a preconditioner trained on small lattice volumes be used on larger volumes with minimal degradation, amortizing training cost."
+  },
+  {
+    "question": "How can the same trained network weights keep working when the measurement process changes to a different task?",
+    "relevant_files": ["1706.04008v1.pdf"],
+    "answerable": true,
+    "reference_answer": "The RIM framework swaps the likelihood gradients for the new task while keeping the trained parameters fixed, enabling across-task generalization."
+  },
+  {
+    "question": "Two of the papers build a matrix-quality measure from the same two statistics of the eigenvalue spectrum. Which statistics are they, and what ratio do both works form from them?",
+    "relevant_files": ["2308.13195v3.pdf", "2503.22286v1.pdf"],
+    "answerable": true,
+    "reference_answer": "Both the omega-condition number and Kaporin's function are formed from the arithmetic mean and the geometric mean of the eigenvalues, as the ratio of arithmetic to geometric mean."
+  },
+  {
+    "question": "Compare the two lattice-gauge-theory approaches to speeding up the Dirac solves: what do they share, and how do they differ on building explicit matrices?",
+    "relevant_files": ["2208.02728v1.pdf", "2509.10378v1.pdf"],
+    "answerable": true,
+    "reference_answer": "Both use neural networks as preconditioners to cut conjugate-gradient iterations for Dirac operators; the CNN approach works with explicit sparse matrices while the matrix-free framework avoids constructing or storing explicit matrices."
+  },
+  {
+    "question": "One paper identifies a structural limitation of message-passing networks for this task; another proposes a cheap input-features recipe for the same family of models. What is the limitation, and what is the recipe's complexity?",
+    "relevant_files": ["2502.01397v3.pdf", "2603.10277v2.pdf"],
+    "answerable": true,
+    "reference_answer": "Message-passing GNNs are inherently local and cannot learn non-local preconditioners; the feature-engineering approach achieves O(nnz + n) complexity."
+  },
+  {
+    "question": "What did the papers conclude about training preconditioners on quantum hardware?",
+    "relevant_files": [],
+    "answerable": false
+  },
+  {
+    "question": "Which reinforcement-learning reward shaping does the corpus recommend for RAG systems?",
+    "relevant_files": [],
+    "answerable": false
+  },
+  {
+    "question": "In what year was the Transformer architecture introduced, and by which company?",
+    "relevant_files": [],
+    "answerable": false
+  }
+]
