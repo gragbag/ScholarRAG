@@ -3,6 +3,8 @@
 Prompt -> text, behind an :class:`LLMClient` protocol with swappable backends:
 
 * :class:`AnthropicLLM` — Claude via the Anthropic Messages API (default).
+* :class:`GeminiLLM`    — Google Gemini (free-tier friendly).
+* :class:`OllamaLLM`    — a local model via Ollama (free, unlimited, offline).
 * :class:`FakeLLM`      — deterministic, dependency-free (tests / CI).
 
 Callers request a semantic *tier* (``"cheap"`` / ``"strong"``); the client maps
@@ -16,6 +18,7 @@ from scholarrag.llm.anthropic import AnthropicLLM
 from scholarrag.llm.base import LLMClient, LLMError, ModelTier
 from scholarrag.llm.fake import FakeLLM
 from scholarrag.llm.gemini import GeminiLLM
+from scholarrag.llm.ollama import OllamaLLM
 
 __all__ = [
     "AnthropicLLM",
@@ -24,6 +27,7 @@ __all__ = [
     "LLMClient",
     "LLMError",
     "ModelTier",
+    "OllamaLLM",
     "build_llm_client",
 ]
 
@@ -38,5 +42,7 @@ def build_llm_client(settings: Settings | None = None) -> LLMClient:
         return AnthropicLLM(settings)
     if provider == "gemini":
         return GeminiLLM(settings)
-    # openai / ollama — wired in a later phase.
+    if provider == "ollama":
+        return OllamaLLM(settings)
+    # openai — wired in a later phase.
     raise ValueError(f"unsupported LLM provider: {provider!r}")

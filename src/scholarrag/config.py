@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     gemini_max_retries: int = 6
     openai_api_key: str | None = None
     ollama_base_url: str = "http://localhost:11434"
+    # Ollama model tags (LLM_PROVIDER=ollama). Pull them first, e.g.
+    # `ollama pull llama3.2:3b`. Cheap = query rewriting/classification; strong =
+    # grounded generation. Any local tag works — pick smaller ones on a slow CPU.
+    ollama_model_cheap: str = "llama3.2:3b"
+    ollama_model_strong: str = "llama3.1:8b"
 
     # -- Embeddings (local sentence-transformers by default; free/on-device) -
     embedding_provider: EmbeddingProvider = "local"

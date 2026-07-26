@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
+.PHONY: help migrate install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -35,6 +35,9 @@ run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
 
 ui: ## Launch the Streamlit chat UI (needs the API running — `make run` — in another terminal)
 	uv run --all-extras streamlit run src/scholarrag/ui/app.py
+
+migrate: ## Apply DB schema migrations (alembic upgrade head)
+	uv run alembic upgrade head
 
 seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
 	uv run --all-extras python -m scholarrag.scripts.seed

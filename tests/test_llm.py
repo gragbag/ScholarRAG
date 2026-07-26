@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import pytest
 
 from scholarrag.config import Settings
-from scholarrag.llm import AnthropicLLM, FakeLLM, GeminiLLM, LLMClient
+from scholarrag.llm import AnthropicLLM, FakeLLM, GeminiLLM, LLMClient, OllamaLLM
 
 
 def _settings() -> Settings:
@@ -27,6 +27,8 @@ def _settings() -> Settings:
         llm_model_strong="sonnet-x",
         gemini_model_cheap="flash-lite-x",
         gemini_model_strong="flash-x",
+        ollama_model_cheap="llama-x",
+        ollama_model_strong="qwen-x",
     )
 
 
@@ -34,6 +36,7 @@ def test_clients_conform_to_protocol() -> None:
     assert isinstance(FakeLLM(), LLMClient)
     assert isinstance(AnthropicLLM(_settings(), create_fn=lambda **kw: None), LLMClient)
     assert isinstance(GeminiLLM(_settings(), generate_fn=lambda **kw: None), LLMClient)
+    assert isinstance(OllamaLLM(_settings()), LLMClient)
 
 
 def test_fake_llm_scripts_and_records_calls() -> None:
@@ -170,3 +173,41 @@ def test_gemini_does_not_retry_non_rate_limit_errors(monkeypatch: pytest.MonkeyP
 
     with pytest.raises(ValueError, match="not a rate limit"):
         llm._retry(boom)
+
+
+# ── Ollama provider (EXERCISE — unskip both once you implement OllamaLLM) ─────
+# These inject the post_fn / stream_fn seams, so they pass with NO Ollama server,
+# no model pulled, and no network — they only check that complete()/stream()
+# assemble the /api/chat request and pull text out of the response correctly.
+def test_ollama_complete_maps_tier_and_extracts_text() -> None:
+    seen: dict[str, object] = {}
+
+    def fake_post(**kwargs: object) -> dict[str, object]:
+        seen.update(kwargs)
+        return {"message": {"role": "assistant", "content": "grounded ollama answer"}, "done": True}
+
+    llm = OllamaLLM(_settings(), post_fn=fake_post)
+    out = llm.complete("Q", system="be brief", tier="strong", max_tokens=42)
+
+    assert out == "grounded ollama answer"
+    assert seen["path"] == "/api/chat"
+    assert seen["json"]["model"] == "qwen-x"  # type: ignore[index]  # strong -> strong model
+    assert seen["json"]["stream"] is False  # type: ignore[index]
+    assert seen["json"]["options"]["num_predict"] == 42  # type: ignore[index]
+    assert seen["json"]["messages"][0] == {"role": "system", "content": "be brief"}  # type: ignore[index]
+    assert seen["json"]["messages"][-1] == {"role": "user", "content": "Q"}  # type: ignore[index]
+
+
+def test_ollama_stream_yields_deltas() -> None:
+    lines = [
+        '{"message": {"content": "hel"}, "done": false}',
+        "",  # a blank keepalive line must be skipped, not crash json.loads
+        '{"message": {"content": "lo"}, "done": false}',
+        '{"message": {"content": ""}, "done": true}',
+    ]
+
+    def fake_stream(**kwargs: object) -> list[str]:
+        return lines
+
+    llm = OllamaLLM(_settings(), stream_fn=fake_stream)
+    assert "".join(llm.stream("Q", tier="cheap")) == "hello"
