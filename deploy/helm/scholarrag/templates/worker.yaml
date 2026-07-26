@@ -1,0 +1,35 @@
+# Celery worker — worked example. Same image as api/ui (built from .Values.image),
+# different command. Concurrency is a value so you can scale ingestion throughput
+# without editing the template.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "scholarrag.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            ["celery", "-A", "scholarrag.workers.celery_app", "worker", "-l", "info", "--concurrency", "{{ .Values.worker.concurrency }}"]
+          envFrom:
+            - configMapRef:
+                name: scholarrag-config
+            - secretRef:
+                name: scholarrag-secrets
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}

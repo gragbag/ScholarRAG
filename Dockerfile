@@ -17,7 +17,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 # observability. `eval` (ragas/mlflow/datasets) is dev/CI-only and deliberately
 # left out to keep the image lean. Without these, the image ModuleNotFounds at
 # query time (the "uv strips extras" gotcha, baked in).
-ARG EXTRAS="--extra llm --extra embeddings --extra langchain --extra agentic --extra ui --extra observability"
+ARG EXTRAS="--extra llm --extra embeddings --extra langchain --extra agentic --extra ui --extra observability --extra auth --extra html"
 
 WORKDIR /app
 
@@ -29,6 +29,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Now install the project.
 COPY src ./src
 COPY README.md ./
+# The sample corpus travels in the image so the in-cluster seed Job can ingest it
+# (~13 MB; a pod has no access to your local disk). Lands at /app/data/sample_corpus,
+# exactly where scripts/seed.py looks.
+COPY data/sample_corpus ./data/sample_corpus
+# Alembic migrations, so the image can create its own schema (`alembic upgrade
+# head`) — a production image should be able to migrate the DB it deploys against.
+COPY alembic.ini ./
+COPY alembic ./alembic
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev ${EXTRAS}
 

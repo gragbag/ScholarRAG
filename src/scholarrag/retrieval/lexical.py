@@ -19,7 +19,14 @@ from scholarrag.retrieval.base import RetrievedChunk
 class LexicalRetriever:
     """Keyword retrieval via Postgres full-text search over ``chunks.fts``."""
 
-    def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        session: Session,
+        query: str,
+        *,
+        top_k: int = 10,
+        collection: str | None = None,
+    ) -> list[RetrievedChunk]:
         "Return the ``top_k`` chunks whose text best matches the query terms."
 
         tsquery = func.websearch_to_tsquery("english", query)
@@ -29,9 +36,20 @@ class LexicalRetriever:
             select(Chunk, rank, Document.filename)
             .join(Document, Chunk.document_id == Document.id)
             .where(Chunk.fts.op("@@")(tsquery))
-            .order_by(rank.desc())
-            .limit(top_k)
         )
+
+        # ── YOUR TURN (Phase 8, Step 1 — lexical folder scoping) ──────────────
+        # The query already JOINs Document, so its `collection` column is in
+        # scope. When `collection` is set, add a WHERE so only that folder's
+        # chunks match; when None, leave the query searching all folders:
+        #   if collection is not None:
+        #       stmt = stmt.where(Document.collection == collection)
+        # Target test: tests/test_retrieval_scoping.py. See EXERCISES.md → Phase 8.
+
+        if collection is not None:
+            stmt = stmt.where(Document.collection == collection)
+
+        stmt = stmt.order_by(rank.desc()).limit(top_k)
 
         chunks = session.execute(stmt).all()
         result = []

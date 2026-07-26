@@ -1,0 +1,27 @@
+# ConfigMap — every raw value is now a lookup into the .Values tree. Note the
+# `| quote`: ConfigMap `data` values must be STRINGS, and `quote` guarantees that
+# (otherwise "true" or a number would render unquoted and Kubernetes rejects it).
+# No `namespace:` here — `helm install --namespace X` sets it for every object.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scholarrag-config
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+data:
+  ENVIRONMENT: {{ .Values.config.environment | quote }}
+  LOG_JSON: {{ .Values.config.logJson | quote }}
+  LLM_PROVIDER: {{ .Values.config.llmProvider | quote }}
+  GEMINI_MODEL_STRONG: {{ .Values.config.geminiModelStrong | quote }}
+  GEMINI_MODEL_CHEAP: {{ .Values.config.geminiModelCheap | quote }}
+  EMBEDDING_PROVIDER: {{ .Values.config.embeddingProvider | quote }}
+  PIPELINE: {{ .Values.config.pipeline | quote }}
+  VECTOR_STORE: {{ .Values.config.vectorStore | quote }}
+  PINECONE_INDEX: {{ .Values.config.pineconeIndex | quote }}
+  PINECONE_CLOUD: {{ .Values.config.pineconeCloud | quote }}
+  PINECONE_REGION: {{ .Values.config.pineconeRegion | quote }}
+  POSTGRES_DSN: {{ .Values.config.postgresDsn | quote }}
+  REDIS_URL: {{ .Values.config.redisUrl | quote }}
+  POSTGRES_USER: {{ .Values.postgres.user | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.password | quote }}
+  POSTGRES_DB: {{ .Values.postgres.database | quote }}

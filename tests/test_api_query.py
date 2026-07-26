@@ -23,10 +23,12 @@ class _FakeEngine:
     def __init__(self, answer: Answer) -> None:
         self._answer = answer
 
-    def query(self, session: Session, query: str) -> Answer:
+    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
         return self._answer
 
-    def stream(self, session: Session, query: str) -> tuple[list[RetrievedChunk], Iterator[str]]:
+    def stream(
+        self, session: Session, query: str, *, collection: str | None = None
+    ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         # candidate chunks + the answer streamed as one token, for the SSE route
         return self._answer.sources, iter([self._answer.text])
 

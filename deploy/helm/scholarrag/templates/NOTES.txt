@@ -1,0 +1,24 @@
+{{/*
+NOTES.txt is special: Helm renders it and PRINTS it after `helm install`/`upgrade`
+(it creates no Kubernetes object). Use it for the "what now?" instructions — the
+first thing an operator sees. It's templated, so it can echo back the actual
+release config.
+*/}}
+✅ {{ .Chart.Name }} {{ .Chart.Version }} deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Watch it come up:
+  kubectl -n {{ .Release.Namespace }} get pods -w
+
+{{- if .Values.ingress.enabled }}
+
+Reach the UI through the ingress (the kind cluster maps host 8080 → :80):
+  http://localhost:8080
+{{- else }}
+
+Ingress is disabled. Port-forward the UI to reach it:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/ui 8501:8501
+  # then open http://localhost:8501
+{{- end }}
+
+Reminder: the Gemini API key is NOT in this chart. If you haven't already:
+  make k8s-secret

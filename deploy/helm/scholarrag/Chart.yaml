@@ -1,0 +1,9 @@
+# Chart metadata — the "package label". `helm install` reads this first.
+apiVersion: v2 # Helm 3 charts are always apiVersion v2
+name: scholarrag
+description: Production-style RAG platform — API, Celery worker, Streamlit UI, Postgres, Redis.
+type: application
+
+# TWO different versions, a classic point of confusion:
+version: 0.1.0 #   the CHART's version — bump when you change templates/values
+appVersion: "0.1.0" #   the APP's version — informational, tracks your code (quoted = string)

@@ -7,6 +7,10 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: check-yaml
+        # k8s manifests bundle Service+Deployment with `---`; allow that. And skip
+        # the Helm templates — they contain Go template `{{ }}`, which isn't YAML.
+        args: [--allow-multiple-documents]
+        exclude: ^deploy/helm/scholarrag/templates/
       - id: check-toml
       - id: check-added-large-files
       - id: check-merge-conflict

@@ -97,9 +97,11 @@ class LangChainQueryEngine:
 
         return prompt | self._llm | StrOutputParser()
 
-    def _retrieve(self, session: Session, query: str) -> list[RetrievedChunk]:
+    def _retrieve(
+        self, session: Session, query: str, collection: str | None = None
+    ) -> list[RetrievedChunk]:
         """Hand-rolled retrieval, identical to the other pipeline (by design)."""
-        return self._retriever.retrieve(session, query, top_k=self._top_k)
+        return self._retriever.retrieve(session, query, top_k=self._top_k, collection=collection)
 
     def _to_answer(self, text: str, chunks: list[RetrievedChunk]) -> Answer:
         "Chain output (a string) -> gated :class:`Answer`."
@@ -111,18 +113,19 @@ class LangChainQueryEngine:
 
     # ── public surface (scaffolded — mirrors QueryEngine) ────────────────────
 
-    def query(self, session: Session, query: str) -> Answer:
+    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
         """Cache-aside -> retrieve -> LCEL chain -> gated Answer."""
-        if self._cache is not None:
-            hit = self._cache.get(query)
+        cache = self._cache if collection is None else None
+        if cache is not None:
+            hit = cache.get(query)
             if hit is not None:
                 return hit
 
-        chunks = self._retrieve(session, query)
+        chunks = self._retrieve(session, query, collection=collection)
         text = self._chain.invoke({"context": format_sources(chunks), "question": query})
         answer = self._to_answer(text, chunks)
-        if self._cache is not None:
-            self._cache.put(query, answer)
+        if cache is not None:
+            cache.put(query, answer)
         return answer
 
     def answer_with_context(
@@ -133,10 +136,12 @@ class LangChainQueryEngine:
         text = self._chain.invoke({"context": format_sources(chunks), "question": query})
         return self._to_answer(text, chunks), chunks
 
-    def stream(self, session: Session, query: str) -> tuple[list[RetrievedChunk], Iterator[str]]:
+    def stream(
+        self, session: Session, query: str, *, collection: str | None = None
+    ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         "Streaming variant — LCEL's freebie."
 
-        chunks = self._retrieve(session, query)
+        chunks = self._retrieve(session, query, collection=collection)
 
         tokens = self._chain.stream({"context": format_sources(chunks), "question": query})
 

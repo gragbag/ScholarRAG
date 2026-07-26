@@ -153,6 +153,19 @@ class Settings(BaseSettings):
     # Selects a profile in scholarrag.corpus (domain is swappable).
     corpus_profile: str = "research_papers"
 
+    # -- Auth (Phase 8) ------------------------------------------------------
+    # Google OAuth client id the incoming ID token must be issued for. When None,
+    # auth is effectively disabled (no valid token can be minted) — fine for the
+    # single-user local demo before you wire the extension.
+    google_client_id: str | None = None
+    # Signs OUR session JWTs. MUST be overridden with a real secret in production.
+    # ≥32 bytes so PyJWT doesn't warn about a weak HMAC key.
+    jwt_secret: str = "dev-insecure-change-me-in-production-please"
+    jwt_expiry_minutes: int = 60 * 24 * 7  # session length: 7 days
+    # Browser CORS allow-list for the extension/UI. "*" = any origin (safe here
+    # because auth is a Bearer token, not cookies); or a comma-separated list.
+    cors_allow_origins: str = "*"
+
     @property
     def use_pinecone(self) -> bool:
         """Whether the resolved vector store should be Pinecone-backed."""

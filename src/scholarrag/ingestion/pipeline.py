@@ -77,6 +77,7 @@ class IngestionPipeline:
         data: bytes,
         filename: str,
         profile: CorpusProfile,
+        collection: str = "default",
     ) -> RegisterResult:
         """Create a ``queued`` document + store its bytes (idempotent by hash).
 
@@ -95,6 +96,7 @@ class IngestionPipeline:
             content_hash=digest,
             content_type=content_type,
             corpus_profile=profile.name,
+            collection=collection,
         )
         document.raw_content = data  # stored so a worker can fetch it later
         session.flush()
@@ -123,7 +125,7 @@ class IngestionPipeline:
             chunks = chunk_text(text, profile)
             embeddings = self._embedder.embed_documents([c.text for c in chunks]) if chunks else []
             records, new_chunks = self._build_records(
-                document_id, document.filename, chunks, embeddings
+                document_id, document.filename, document.collection, chunks, embeddings
             )
             self._vector_store.upsert(records)
             repo.add_chunks(session, document_id, new_chunks)
@@ -149,9 +151,12 @@ class IngestionPipeline:
         data: bytes,
         filename: str,
         profile: CorpusProfile,
+        collection: str = "default",
     ) -> IngestResult:
         """Synchronous end-to-end ingest (register + process)."""
-        registration = self.register(session, data=data, filename=filename, profile=profile)
+        registration = self.register(
+            session, data=data, filename=filename, profile=profile, collection=collection
+        )
         document = registration.document
         if not registration.created:
             return IngestResult(
@@ -170,6 +175,7 @@ class IngestionPipeline:
         self,
         document_id: uuid.UUID,
         filename: str,
+        collection: str,
         chunks: list[TextChunk],
         embeddings: list[Vector],
     ) -> tuple[list[VectorRecord], list[NewChunk]]:
@@ -186,6 +192,7 @@ class IngestionPipeline:
                     "document_id": str(document_id),
                     "chunk_index": chunk.index,
                     "filename": filename,
+                    "collection": collection,  # lets dense retrieval scope by folder
                 },
             )
             new_chunk = NewChunk(

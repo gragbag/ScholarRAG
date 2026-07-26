@@ -42,24 +42,32 @@ class QueryEngine:
         self._multi_query = multi_query
 
     @observe(name="retrieve")
-    def _retrieve(self, session: Session, query: str) -> list[RetrievedChunk]:
+    def _retrieve(
+        self, session: Session, query: str, collection: str | None = None
+    ) -> list[RetrievedChunk]:
         """Rewrite -> retrieve per query -> fuse across queries (the retrieval half)."""
         queries = self._rewriter.rewrite(query) if self._multi_query else [query]
-        result_lists = [self._retriever.retrieve(session, q, top_k=self._top_k) for q in queries]
+        result_lists = [
+            self._retriever.retrieve(session, q, top_k=self._top_k, collection=collection)
+            for q in queries
+        ]
         return reciprocal_rank_fusion(result_lists, top_k=self._top_k)
 
     @observe(name="query")
-    def query(self, session: Session, query: str) -> Answer:
+    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
         "Run the full RAG pipeline for ``query`` and return a grounded answer."
-        if self._cache is not None:
-            hit = self._cache.get(query)
+        # Cache only the unscoped path — a folder-scoped query must not read/write
+        # the shared cache (same text, different folder = different answer).
+        cache = self._cache if collection is None else None
+        if cache is not None:
+            hit = cache.get(query)
             if hit is not None:
                 return hit
 
-        fused = self._retrieve(session, query)
+        fused = self._retrieve(session, query, collection=collection)
         answer = self._answerer.answer(query, fused)
-        if self._cache is not None:
-            self._cache.put(query, answer)
+        if cache is not None:
+            cache.put(query, answer)
         return answer
 
     @observe(name="query-stream")
@@ -70,11 +78,13 @@ class QueryEngine:
         fused = self._retrieve(session, query)
         return self._answerer.answer(query, fused), fused
 
-    def stream(self, session: Session, query: str) -> tuple[list[RetrievedChunk], Iterator[str]]:
+    def stream(
+        self, session: Session, query: str, *, collection: str | None = None
+    ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         """Streaming variant: retrieve synchronously, then stream the answer tokens.
 
         Returns the fused candidate chunks (so the caller can resolve citations
         once the stream finishes) plus an iterator of answer text deltas.
         """
-        fused = self._retrieve(session, query)
+        fused = self._retrieve(session, query, collection=collection)
         return fused, self._answerer.answer_stream(query, fused)

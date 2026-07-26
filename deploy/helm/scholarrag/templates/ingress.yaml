@@ -1,0 +1,28 @@
+# ── YOUR TURN (Phase 7, Step 3 — Exercise C: make the ingress optional) ───────
+# This Ingress ALWAYS renders, but values.yaml has an `ingress.enabled` flag that
+# nothing reads yet. Wrap the whole object in an "if" conditional so that setting
+# ingress.enabled=false omits it entirely (e.g. a cloud install using a
+# LoadBalancer instead). It's one line at the very top of the file and one at the
+# very bottom. Exact syntax + a verify command: EXERCISES.md → Phase 7 Step 3,
+# Exercise C. (No template syntax in "#" comments — Helm executes those too.)
+# ──────────────────────────────────────────────────────────────────────────────
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: scholarrag
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: ui
+                port:
+                  number: 8501
+{{- end }}

@@ -1,0 +1,43 @@
+# A Kubernetes JOB — a run-to-COMPLETION workload, unlike a Deployment (which
+# runs forever). This one ingests the sample corpus into Postgres, then exits.
+# Run it once after the app is deployed:  make k8s-seed
+#
+# Works whether the app was deployed via raw manifests, Helm, or Terraform — it
+# just references the fixed-name ConfigMap/Secret and the same image.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: seed
+spec:
+  backoffLimit: 2 # retry the pod up to 2x if it fails
+  ttlSecondsAfterFinished: 600 # auto-delete the finished Job after 10 min
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scholarrag
+        app.kubernetes.io/component: seed
+    spec:
+      # Jobs use Never or OnFailure — NOT Always (a completed pod must stay done).
+      restartPolicy: Never
+      containers:
+        - name: seed
+          image: scholarrag-api:latest
+          imagePullPolicy: IfNotPresent
+          # Migrate the schema THEN load the corpus — seeding an unmigrated DB is
+          # meaningless, so this Job does both ("initialize the database").
+          command: ["sh", "-c", "alembic upgrade head && python -m scholarrag.scripts.seed"]
+          envFrom:
+            - configMapRef:
+                name: scholarrag-config
+            - secretRef:
+                name: scholarrag-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              memory: "2Gi" # torch + the BGE model load during embedding

@@ -1,0 +1,64 @@
+# ── YOUR TURN (Phase 7, Step 3 — Exercise A: templatize the API) ──────────────
+# This template still HARDCODES three things (marked TODO below): the image, the
+# replica count, and the resources block. The chart installs fine as-is, but those
+# can't be configured without editing the template — which defeats Helm's purpose.
+# Replace each with a .Values lookup, copying the pattern from redis.yaml (the
+# worked example). The exact syntax + a verify command are in EXERCISES.md →
+# Phase 7 Step 3, Exercise A.  (Reminder: put template syntax only in real YAML,
+# never in a "#" comment — Helm executes comments too, as we just learned.)
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/component: api
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        {{- include "scholarrag.labels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: api
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: scholarrag-config
+            - secretRef:
+                name: scholarrag-secrets
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10

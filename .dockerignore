@@ -11,9 +11,11 @@
 *.db
 mlflow.db
 
-# The corpus (large PDFs) — loaded into Postgres at seed time, not read from
-# the image. Keep it out of the build context.
-data/
+# Keep data/ out of the image EXCEPT the sample corpus, which the in-cluster seed
+# Job needs (a pod can't reach your local disk). `data/*` (not `data/`) excludes
+# the CONTENTS while leaving the dir re-includable, so the `!` negation works.
+data/*
+!data/sample_corpus
 
 # Python / tooling caches and the local venv (rebuilt inside the image)
 .venv/

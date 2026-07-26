@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from scholarrag import __version__
 from scholarrag.api.middleware import correlation_id_middleware
-from scholarrag.api.routes import documents, query
+from scholarrag.api.routes import auth, documents, query
 from scholarrag.config import Settings, get_settings
 from scholarrag.corpus import available_profiles, get_corpus_profile
 from scholarrag.guardrails import build_rate_limiter
@@ -84,6 +84,26 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("shutdown")
 
 
+def _configure_cors(app: FastAPI, settings: Settings) -> None:
+    """Allow the browser extension / UI (a different origin) to call the API.
+
+    Auth is a Bearer token (not a cookie), so ``*`` is safe — we don't enable
+    credentialed CORS. Set ``CORS_ALLOW_ORIGINS`` to a comma-separated list to lock
+    it down to specific extension origins in production.
+    """
+    from fastapi.middleware.cors import CORSMiddleware
+
+    raw = settings.cors_allow_origins.strip()
+    origins = ["*"] if raw == "*" else [o.strip() for o in raw.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Application factory — used by uvicorn and by the test suite."""
     settings = settings or get_settings()
@@ -98,6 +118,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.rate_limiter = build_rate_limiter(settings)  # None when disabled
     configure_observability(settings)  # no-op unless Langfuse keys are set
     configure_otel(settings, app)  # must run pre-start so the middleware attaches
+    _configure_cors(app, settings)  # let the browser extension / UI call the API
     app.middleware("http")(correlation_id_middleware)
 
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
@@ -157,6 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             file_types=list(profile.file_types),
         )
 
+    app.include_router(auth.router)
     app.include_router(documents.router)
     app.include_router(query.router)
     return app

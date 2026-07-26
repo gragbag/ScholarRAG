@@ -1,0 +1,27 @@
+# kind cluster for ScholarRAG — a real (conformant) Kubernetes cluster running
+# inside Docker on this machine. Create it with:
+#
+#   kind create cluster --config deploy/kind/cluster.yaml
+#
+# One control-plane node, labelled `ingress-ready=true` so the NGINX ingress
+# controller schedules onto it. Host ports 8080/8443 map into the node's 80/443
+# so the ingress is reachable at http://localhost:8080 (non-privileged host
+# ports, chosen to avoid the 80/443 conflicts a dev machine usually has).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: scholarrag
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 8443
+        protocol: TCP

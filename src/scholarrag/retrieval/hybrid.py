@@ -38,15 +38,26 @@ class HybridRetriever:
         self._candidate_k = candidate_k
         self._rrf_k = rrf_k
 
-    def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        session: Session,
+        query: str,
+        *,
+        top_k: int = 10,
+        collection: str | None = None,
+    ) -> list[RetrievedChunk]:
         "Retrieve, fuse, and (optionally) rerank — best ``top_k`` chunks first."
         tracer = get_tracer("scholarrag.retrieval")
 
         with tracer.start_as_current_span("retrieve.dense"):
-            dense_hits = self._dense.retrieve(session, query, top_k=self._candidate_k)
+            dense_hits = self._dense.retrieve(
+                session, query, top_k=self._candidate_k, collection=collection
+            )
 
         with tracer.start_as_current_span("retrieve.lexical"):
-            lexical_hits = self._lexical.retrieve(session, query, top_k=self._candidate_k)
+            lexical_hits = self._lexical.retrieve(
+                session, query, top_k=self._candidate_k, collection=collection
+            )
 
         fused = reciprocal_rank_fusion(
             [dense_hits, lexical_hits], k=self._rrf_k, top_k=self._candidate_k

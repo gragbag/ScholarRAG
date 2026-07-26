@@ -42,6 +42,16 @@ class Retriever(Protocol):
     the dense retriever ignores it, since it reads from the vector store.
     """
 
-    def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
-        """Return up to ``top_k`` chunks most relevant to ``query``, best first."""
+    def retrieve(
+        self,
+        session: Session,
+        query: str,
+        *,
+        top_k: int = 10,
+        collection: str | None = None,
+    ) -> list[RetrievedChunk]:
+        """Return up to ``top_k`` chunks most relevant to ``query``, best first.
+
+        ``collection`` scopes retrieval to one folder; ``None`` searches all.
+        """
         ...

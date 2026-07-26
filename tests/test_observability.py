@@ -151,7 +151,7 @@ def test_hybrid_emits_manual_spans(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _Stub:
         def retrieve(
-            self, session: Session, query: str, *, top_k: int = 10
+            self, session: Session, query: str, *, top_k: int = 10, collection: str | None = None
         ) -> list[RetrievedChunk]:
             return []
 

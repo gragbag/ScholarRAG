@@ -1,0 +1,8 @@
+# All ScholarRAG resources live in their own namespace — a soft boundary that
+# keeps them grouped and easy to `kubectl delete namespace scholarrag` in one go.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag

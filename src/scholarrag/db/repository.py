@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from scholarrag.db.models import Chunk, Document, IngestionStatus
+from scholarrag.db.models import Chunk, Document, IngestionStatus, User
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +34,7 @@ def create_document(
     content_hash: str,
     content_type: str,
     corpus_profile: str,
+    collection: str = "default",
 ) -> Document:
     """Insert a new document row in the ``queued`` state and return it."""
     document = Document(
@@ -41,11 +42,37 @@ def create_document(
         content_hash=content_hash,
         content_type=content_type,
         corpus_profile=corpus_profile,
+        collection=collection,
         status=IngestionStatus.queued,
     )
     session.add(document)
     session.flush()  # assigns document.id without committing
     return document
+
+
+def list_collections(session: Session) -> list[str]:
+    """Return the distinct folder names, alphabetically."""
+    stmt = select(Document.collection).distinct().order_by(Document.collection)
+    return list(session.scalars(stmt).all())
+
+
+def upsert_user(session: Session, *, google_sub: str, email: str, name: str | None = None) -> User:
+    """Return the user for ``google_sub``, creating them on first sign-in."""
+    user = session.scalars(select(User).where(User.google_sub == google_sub)).first()
+    if user is None:
+        user = User(google_sub=google_sub, email=email, name=name)
+        session.add(user)
+        session.flush()
+    else:
+        user.email = email  # keep email fresh; google_sub is the stable key
+        if name:
+            user.name = name
+    return user
+
+
+def get_user(session: Session, user_id: uuid.UUID) -> User | None:
+    """Load a user by primary key."""
+    return session.get(User, user_id)
 
 
 def get_document(session: Session, document_id: uuid.UUID) -> Document | None:

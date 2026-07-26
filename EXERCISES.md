@@ -705,6 +705,214 @@ docker compose logs ui        # no connection errors
 **Acceptance:** `docker compose config` valid, the api image builds, and the UI
 in a container answers a question through the api container.
 
+## Step 2 — Raw Kubernetes manifests on kind
+
+Scaffolded + already applied to a running kind cluster: `deploy/kind/cluster.yaml`
+(the cluster), `deploy/k8s/*.yaml` (namespace, ConfigMap, Postgres StatefulSet +
+PVC, Redis, api/worker/ui Deployments + Services, NGINX Ingress), and Makefile
+targets (`cluster-up`, `k8s-image`, `k8s-secret`, `k8s-deploy`, `k8s-status`,
+`cluster-down`). All five pods reach Ready and `http://localhost:8080` serves the
+UI through the ingress.
+
+### Exercise — health probes (`deploy/k8s/20-api.yaml`)
+The API Deployment has **no** `livenessProbe`/`readinessProbe` — add them.
+
+**Why it matters:** without a readiness probe, k8s marks the pod Ready the instant
+the container process starts — *before uvicorn is listening* — so the Service
+sends traffic to a dead socket during every rollout. The liveness probe is the
+other half: if the process wedges, k8s restarts it. The app already serves
+`GET /health` (liveness) and `GET /ready` (readiness) — wire `httpGet` probes on
+port 8000 to them (a shape is sketched in the manifest).
+
+**Verify:**
+```
+kubectl apply -f deploy/k8s/20-api.yaml
+kubectl -n scholarrag describe pod -l app.kubernetes.io/component=api | grep -A1 -iE 'liveness|readiness'
+# should show your probes, not "<none>"; READY flips to 1/1 only after /ready passes
+```
+
+**Acceptance:** all pods Ready, the API pod shows both probes in `describe`, and
+`curl localhost:8080/_stcore/health` returns `ok` (ingress → UI still healthy).
+
+## Step 3 — Helm chart
+
+The nine raw manifests are now a chart in `deploy/helm/scholarrag/` — `Chart.yaml`
+(metadata), `values.yaml` (all the config), and `templates/` (the manifests with
+`{{ .Values.* }}` substituted). Study `templates/redis.yaml` — it's the fully
+worked example. Three exercises, one per Helm pillar. Verify each with
+`helm template` (renders locally, no cluster needed) or `make helm-template`.
+
+> **Golden rule you'll internalize here:** Helm templates the *entire* file,
+> including `#` comments — so template syntax (`{{ }}`) goes only in real YAML,
+> never in a comment. Use `{{/* ... */}}` for comments that must mention it.
+
+### Exercise A — templatize the API (`templates/api.yaml`)
+Three values are hardcoded (marked `TODO`). Wire them to `values.yaml`:
+```yaml
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+```
+```yaml
+  replicas: {{ .Values.api.replicas }}
+```
+```yaml
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+```
+**Verify:** `helm template scholarrag deploy/helm/scholarrag --set api.replicas=3 | grep -A20 'kind: Deployment' | grep -m1 replicas` → `replicas: 3` (the `--set` now flows through — the whole point of Helm).
+
+### Exercise B — the labels helper (`templates/_helpers.tpl`)
+`scholarrag.labels` emits only one label. Add the other three standard ones after it:
+```
+app.kubernetes.io/instance: {{ .Release.Name }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+```
+**Verify:** `helm template scholarrag deploy/helm/scholarrag | grep -c managed-by` → `16` (11 objects each get the labels in `metadata`, PLUS the 5 workloads with pod templates get them a 2nd time on their pods → 11 + 5 = 16 — every object re-labelled from one edit, the DRY win of named templates).
+
+### Exercise C — optional ingress (`templates/ingress.yaml`)
+Wrap the whole object so the `ingress.enabled` flag actually does something. First line of the file and last line:
+```
+{{- if .Values.ingress.enabled }}
+... the whole Ingress ...
+{{- end }}
+```
+**Verify:** `helm template scholarrag deploy/helm/scholarrag --set ingress.enabled=false | grep -c 'kind: Ingress'` → `0` (and `1` without the flag).
+
+**Acceptance:** `make helm-lint` clean, all three verify checks pass, then deploy
+for real — tear down Step 2's raw apply first so Helm owns the namespace:
+```
+kubectl delete -f deploy/k8s/ --ignore-not-found   # remove the hand-applied copies
+make helm-deploy                                    # helm upgrade --install + secret
+```
+All five pods Ready under the Helm release, `http://localhost:8080` still serves
+the UI. `helm list -n scholarrag` shows your release; `helm uninstall` removes it all.
+
+## Step 4 — Terraform
+
+`deploy/terraform/` provisions the cluster AND deploys the app from one
+`terraform apply`. Scaffolded: the `kind_cluster`, provider config, image-load +
+ingress (`null_resource`), namespace, and secret. Verified: `make tf-init` +
+`make tf-validate` pass. Two exercises complete the graph.
+
+### Exercise A — drive Helm from Terraform (`variables.tf` + `main.tf`)
+This is the keystone: Terraform installing your Helm chart.
+1. In `variables.tf`, uncomment the `api_replicas` variable (number, default 1).
+2. In `main.tf`, uncomment and complete the `helm_release "scholarrag"` block. The
+   fields are already sketched — a `set` block wires `api.replicas` = `var.api_replicas`,
+   proving Terraform can override chart values.
+
+**Verify:** `make tf-validate` passes, and (after a cluster exists) `make tf-plan`
+shows `helm_release.scholarrag` to be created.
+
+### Exercise B — an output (`outputs.tf`)
+Uncomment the `ui_url` output and set it to the URL the UI is reachable at
+(`http://localhost:8080` — the kind port-map → ingress → UI).
+
+**Verify:** `terraform -chdir=deploy/terraform output ui_url` after apply.
+
+**Acceptance / deploy for real** — Terraform OWNS the cluster, so tear down the
+one you made by hand first (this also removes Step 2/3's stack):
+```
+kind delete cluster --name scholarrag     # hand cluster ownership to Terraform
+make tf-init                              # once
+make tf-apply                             # cluster + ingress + secret + Helm app, from nothing
+terraform -chdir=deploy/terraform output  # see ui_url
+# open http://localhost:8080
+make tf-destroy                           # one command tears it ALL down
+```
+If the first apply complains about an unknown provider config, run once:
+`TF_VAR_gemini_api_key=... terraform -chdir=deploy/terraform apply -target=kind_cluster.default`, then `make tf-apply`.
+
+---
+
+# Phase 8 — Ingest pages into folders (Step 1: folders + scoped retrieval)
+
+Scaffolded: a `collection` column on `Document` (+ migration), threaded through
+ingestion (into the vector metadata) and through all three engines' `query`/
+`stream(..., collection=…)`; `POST /query` takes a `folder`, `POST /documents`
+takes a `folder` form field, and `GET /folders` lists them. Two exercises close
+the loop — actually *scoping* the two retrievers. Targets in
+`tests/test_retrieval_scoping.py`.
+
+### Exercise 1 — dense scoping (`retrieval/dense.py`)
+Every vector carries a `collection` metadata field. Build the metadata filter so a
+scoped query only sees its folder:
+```python
+metadata_filter = {"collection": collection} if collection else None
+```
+(then it's already passed to `self._vector_store.query(..., filter=metadata_filter)`.)
+**Target:** `test_dense_scoping`.
+
+### Exercise 2 — lexical scoping (`retrieval/lexical.py`)
+The query already JOINs `Document`, so add a WHERE when a folder is given:
+```python
+if collection is not None:
+    stmt = stmt.where(Document.collection == collection)
+```
+**Target:** `test_lexical_scoping`.
+
+**Verify:** unskip both, `make check`. Then live: `POST /documents` with
+`folder=papers`, `POST /query {query, folder: "papers"}` → only that folder's
+chunks ground the answer; `GET /folders` lists your folders.
+
+**Note:** the cluster/dev DB needs the new migration — `alembic upgrade head`
+(the in-cluster seed Job already runs it).
+
+## Phase 8 — Auth core (Google OAuth + session JWTs)
+
+Scaffolded: a `User` model (+ migration), `POST /auth/google` (Google token →
+session JWT) and a protected `GET /auth/me`, plus `repo.upsert_user`. Three
+exercises are the security-critical logic. Needs the `auth` extra (`pyjwt`);
+targets in `tests/test_auth.py`.
+
+### Exercise 1 — the session JWT pair (`auth/tokens.py`)
+`create_access_token` (sign a JWT with `sub`/`iat`/`exp`) and
+`decode_access_token` (verify signature + expiry → user id). `jwt.decode` does
+the checking — that's why you *verify*, not just parse.
+**Targets:** `test_jwt_roundtrip`, `test_jwt_rejects_tampering`.
+
+### Exercise 2 — the security boundary (`auth/deps.py`)
+`get_current_user`: read the `Bearer` header → `decode_access_token` →
+`repo.get_user`. Every failure path (no header / bad token / unknown user) is a
+**401, never a 500**. Any route can then require `Depends(get_current_user)`.
+**Target:** `test_get_current_user_endpoint`.
+
+### Exercise 3 — Google verification (`auth/google.py`)
+`verify_google_token`: use `google.oauth2.id_token.verify_oauth2_token` (checks
+Google's signature, expiry, AND that the token's audience is *your* client id —
+that audience check is what stops a token minted for another app).
+**Target:** `test_verify_google_token`.
+
+**Verify:** `make check`. Live smoke test (after implementing): mint a token in a
+`python` shell with `create_access_token(...)`, then
+`curl -H "Authorization: Bearer <token>" localhost:8001/auth/me`. The full Google
+flow needs a real OAuth **client id** (Google Cloud Console) in `GOOGLE_CLIENT_ID`.
+
+## Phase 8 — Step 2: fetching text + pages
+
+Scaffolded: an `html` content type, two ingest routes — `POST /documents/text`
+(the extension's Readability output) and `POST /documents/url` (server-fetch),
+plus CORS so the extension can call the API. Two exercises = the extraction and
+the sniff. Extras: `html` (trafilatura). Targets in `test_parse_html.py`,
+`test_fetch.py`.
+
+### Exercise 1 — readable HTML extraction (`ingestion/parse.py`, `_extract_html`)
+`import trafilatura` (inside the function), `text = trafilatura.extract(html)`,
+return `text or ""`. It scores the DOM and returns just the article body —
+server-side Readability.
+**Target:** `test_extract_html_strips_boilerplate`.
+
+### Exercise 2 — content-type sniffing (`ingestion/fetch.py`, `sniff_extension`)
+Return `".pdf"` when the URL path ends `.pdf` OR the Content-Type header is
+`application/pdf`; else `".html"`. This is how the pipeline picks its extractor
+for a fetched URL.
+**Targets:** `test_sniff_extension`, `test_fetch_url_returns_bytes_and_filename`.
+
+**Verify:** `make check`. Live: `curl -X POST localhost:8001/documents/text -H
+'content-type: application/json' -d '{"text":"...","title":"My note","folder":"papers"}'`
+then query `folder: "papers"`.
+
 ---
 
 ## When you're done

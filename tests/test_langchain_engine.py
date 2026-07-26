@@ -23,7 +23,9 @@ def _chunk(cid: str, text: str) -> RetrievedChunk:
 
 
 class StubRetriever:
-    def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
+    def retrieve(
+        self, session: Session, query: str, *, top_k: int = 10, collection: str | None = None
+    ) -> list[RetrievedChunk]:
         return [_chunk("0", "RAG grounds answers"), _chunk("1", "unrelated")][:top_k]
 
 

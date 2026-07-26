@@ -70,6 +70,10 @@ agentic = ["langgraph>=1,<2"]
 # already core), so only Streamlit itself is optional. Kept out of CI — the
 # testable client logic in scholarrag.ui.client needs no extra.
 ui = ["streamlit>=1.40,<2"]
+# Phase 8: user auth — verify Google OAuth ID tokens + sign our own session JWTs.
+auth = ["pyjwt>=2.9", "google-auth>=2.30"]
+# Phase 8: server-side readable-text extraction from fetched HTML pages.
+html = ["trafilatura>=1.8"]
 # Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
 # adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
 eval = [
@@ -168,6 +172,9 @@ module = [
     "opentelemetry.*",
     "langgraph.*",
     "streamlit.*",
+    "google.auth.*",
+    "google.oauth2.*",
+    "trafilatura.*",
 ]
 follow_imports = "skip"
 ignore_missing_imports = true

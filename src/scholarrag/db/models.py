@@ -55,6 +55,24 @@ class IngestionStatus(enum.StrEnum):
     dead_letter = "dead_letter"  # gave up after retries (poison document)
 
 
+class User(Base):
+    """An authenticated account. Populated on first Google sign-in."""
+
+    __tablename__ = "users"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Google's stable subject id — the join key we trust (email can change).
+    google_sub: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(320), index=True)
+    name: Mapped[str | None] = mapped_column(String(255), default=None)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"User(id={self.id!s}, email={self.email!r})"
+
+
 class Document(Base):
     __tablename__ = "documents"
 
@@ -64,8 +82,12 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(1024))
     # sha256 of the raw file bytes — the idempotency key (unique).
     content_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
-    content_type: Mapped[str] = mapped_column(String(32))  # "pdf" | "md" | "txt"
+    content_type: Mapped[str] = mapped_column(String(32))  # "pdf" | "md" | "txt" | "html"
     corpus_profile: Mapped[str] = mapped_column(String(64))
+    # The user-facing "folder" a document belongs to. Retrieval can be scoped to
+    # one collection. `corpus_profile` selects chunking behaviour; `collection`
+    # groups documents — different concerns, so it's a separate column.
+    collection: Mapped[str] = mapped_column(String(64), default="default", index=True)
     status: Mapped[IngestionStatus] = mapped_column(
         SAEnum(
             IngestionStatus,

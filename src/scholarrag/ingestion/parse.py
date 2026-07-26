@@ -35,6 +35,8 @@ _EXT_TO_TYPE: dict[str, ContentType] = {
     ".markdown": "md",
     ".txt": "txt",
     ".text": "txt",
+    ".html": "html",
+    ".htm": "html",
 }
 
 
@@ -59,6 +61,8 @@ def extract_text(data: bytes, content_type: ContentType) -> str:
         text = data.decode("utf-8", errors="replace")
     elif content_type == "pdf":
         text = _extract_pdf(data)
+    elif content_type == "html":
+        text = _extract_html(data)
     else:
         raise UnsupportedFileTypeError(f"unsupported content type: {content_type!r}")
     # PDF glyph extraction can emit NUL/control bytes; strip them so the text is
@@ -70,6 +74,17 @@ def _extract_pdf(data: bytes) -> str:
     reader = PdfReader(io.BytesIO(data))
     pages = [page.extract_text() or "" for page in reader.pages]
     return "\n\n".join(pages).strip()
+
+
+def _extract_html(data: bytes) -> str:
+    "Pull the main readable article text out of raw HTML, dropping boilerplate."
+
+    import trafilatura
+
+    html = data.decode("utf-8", errors="replace")
+    text = trafilatura.extract(html)
+
+    return text or ""
 
 
 def extract_text_from_path(path: str | Path) -> str:

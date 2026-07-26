@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from scholarrag.embeddings.base import Embedder
 from scholarrag.retrieval.base import RetrievedChunk
-from scholarrag.vectorstore.base import VectorStore
+from scholarrag.vectorstore.base import Metadata, VectorStore
 
 
 class DenseRetriever:
@@ -23,11 +23,20 @@ class DenseRetriever:
         self._embedder = embedder
         self._vector_store = vector_store
 
-    def retrieve(self, session: Session, query: str, *, top_k: int = 10) -> list[RetrievedChunk]:
+    def retrieve(
+        self,
+        session: Session,
+        query: str,
+        *,
+        top_k: int = 10,
+        collection: str | None = None,
+    ) -> list[RetrievedChunk]:
         "Embed the query and return the ``top_k`` nearest chunks."
         vector = self._embedder.embed_query(query)
 
-        matches = self._vector_store.query(vector, top_k=top_k)
+        metadata_filter: Metadata | None = {"collection": collection} if collection else None
+
+        matches = self._vector_store.query(vector, top_k=top_k, filter=metadata_filter)
 
         chunks = []
         for match in matches:

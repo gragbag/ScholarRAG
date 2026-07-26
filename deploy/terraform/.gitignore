@@ -1,0 +1,10 @@
+# Terraform — never commit state (may hold secrets), local provider binaries, or
+# real tfvars. DO commit .terraform.lock.hcl (pins provider versions, like uv.lock).
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+override.tf
+override.tf.json

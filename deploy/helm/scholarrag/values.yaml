@@ -1,0 +1,75 @@
+# Default values for the scholarrag chart.
+#
+# This file is the chart's ENTIRE configuration surface — everything a template
+# reads as `.Values.<x>`. Override any of it at install time without editing the
+# templates:  helm install ... --set api.replicas=3   (or  -f my-values.yaml).
+#
+# That separation is the whole point of Helm: templates = structure (stable),
+# values = configuration (varies per environment). Dev vs prod differ only here.
+
+image:
+  repository: scholarrag-api
+  tag: latest
+  # IfNotPresent uses the image we `kind load`ed; a registry pull of :latest would
+  # fail on kind. On real clusters you'd push to a registry and set this to Always.
+  pullPolicy: IfNotPresent
+
+# Non-secret app config → rendered into the ConfigMap → injected via envFrom.
+# The Gemini API key is deliberately NOT here — secrets never belong in values
+# (this file is committed). Create it out-of-band with `make k8s-secret`.
+config:
+  environment: production
+  logJson: "true"
+  llmProvider: gemini
+  # flash-lite for BOTH tiers — dodges the strong model's 20-requests/day cap.
+  geminiModelStrong: gemini-3.1-flash-lite
+  geminiModelCheap: gemini-3.1-flash-lite
+  embeddingProvider: local
+  pipeline: langchain
+  postgresDsn: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
+  redisUrl: redis://redis:6379/0
+  # Vector store: Pinecone (a PERSISTENT, shared store) — an in-cluster in-memory
+  # store can't span the seed-Job → API-pod boundary. Dedicated index so it never
+  # collides with your local `scholarrag` index. The key is in the Secret.
+  vectorStore: pinecone
+  pineconeIndex: scholarrag-k8s
+  pineconeCloud: aws
+  pineconeRegion: us-east-1
+
+postgres:
+  user: scholarrag
+  password: scholarrag # throwaway LOCAL value; a real deploy puts this in a Secret
+  database: scholarrag
+  storage: 1Gi
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { memory: 512Mi }
+
+redis:
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { memory: 256Mi }
+
+api:
+  replicas: 1
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi } # headroom for torch (CPU) + the BGE model
+
+worker:
+  replicas: 1
+  concurrency: 2
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 2Gi }
+
+ui:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+ingress:
+  enabled: true
+  className: nginx
+  path: /

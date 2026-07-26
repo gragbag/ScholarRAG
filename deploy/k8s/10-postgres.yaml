@@ -1,0 +1,83 @@
+# Postgres as a StatefulSet — stateful workloads get stable identity and their
+# own persistent volume (via volumeClaimTemplates), unlike a Deployment whose
+# pods are interchangeable and storage-less. A headless Service (clusterIP: None)
+# gives the pod a stable DNS name.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: postgres
+spec:
+  clusterIP: None # headless — StatefulSet stable network identity
+  selector:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scholarrag
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scholarrag
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          # POSTGRES_USER/PASSWORD/DB come from the ConfigMap.
+          envFrom:
+            - configMapRef:
+                name: scholarrag-config
+          env:
+            # Point PGDATA at a subdir so the volume's lost+found doesn't collide
+            # with initdb (a classic StatefulSet-on-a-fresh-PVC gotcha).
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "scholarrag"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "scholarrag"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              memory: "512Mi"
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

@@ -1,0 +1,41 @@
+# Non-secret configuration, injected into every pod via `envFrom`. The app reads
+# these as environment variables (pydantic Settings, case-insensitive). Secrets
+# (the Gemini key) live in a separate Secret — see secret.example.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scholarrag-config
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+data:
+  ENVIRONMENT: "production"
+  LOG_JSON: "true"
+
+  # LLM: flash-lite for BOTH tiers (same as the local .env override) — dodges the
+  # strong model's 20-requests/day free-tier cap.
+  LLM_PROVIDER: "gemini"
+  GEMINI_MODEL_STRONG: "gemini-3.1-flash-lite"
+  GEMINI_MODEL_CHEAP: "gemini-3.1-flash-lite"
+
+  EMBEDDING_PROVIDER: "local"
+  PIPELINE: "langchain"
+
+  # Vector store: Pinecone (persistent + shared — an in-memory store can't span
+  # the seed-Job → API-pod boundary). Dedicated index; the key lives in the Secret.
+  VECTOR_STORE: "pinecone"
+  PINECONE_INDEX: "scholarrag-k8s"
+  PINECONE_CLOUD: "aws"
+  PINECONE_REGION: "us-east-1"
+
+  # In-cluster service DNS: pods reach postgres/redis by SERVICE NAME on their
+  # CONTAINER ports (5432/6379) — the same "service name, not localhost" lesson
+  # as the compose exercise, now with Kubernetes DNS.
+  POSTGRES_DSN: "postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag"
+  REDIS_URL: "redis://redis:6379/0"
+
+  # Throwaway LOCAL values the postgres container reads to initialise itself.
+  # In a real deploy the password belongs in the Secret, not here.
+  POSTGRES_USER: "scholarrag"
+  POSTGRES_PASSWORD: "scholarrag"
+  POSTGRES_DB: "scholarrag"

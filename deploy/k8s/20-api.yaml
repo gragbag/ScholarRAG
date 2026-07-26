@@ -1,0 +1,65 @@
+# The FastAPI backend. A Deployment (stateless, replicas interchangeable) fronted
+# by a ClusterIP Service at api:8000. Config + secrets are injected via envFrom.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: api
+spec:
+  selector:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: api
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: scholarrag
+  labels:
+    app.kubernetes.io/name: scholarrag
+    app.kubernetes.io/component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: scholarrag
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: scholarrag
+        app.kubernetes.io/component: api
+    spec:
+      containers:
+        - name: api
+          image: scholarrag-api:latest
+          # Use the image we `kind load`ed into the cluster; don't try to pull a
+          # `:latest` tag from a registry (which would ImagePullBackOff).
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: scholarrag-config
+            - secretRef:
+                name: scholarrag-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              memory: "2Gi" # headroom for torch (CPU) + the BGE model in RAM
+          livenessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet: { path: /ready, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 10

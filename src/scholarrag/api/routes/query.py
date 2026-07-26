@@ -31,6 +31,8 @@ class QueryRequest(BaseModel):
     # Length bounds are the first input guardrail: junk and oversized payloads
     # get a free 422 from the schema before any pipeline work happens.
     query: str = Field(min_length=3, max_length=2000)
+    # Scope retrieval to one folder; omit (null) to search every folder.
+    folder: str | None = Field(default=None, max_length=64)
 
 
 def _check_rate_limit(request: Request) -> None:
@@ -83,8 +85,16 @@ async def query_documents(
 ) -> QueryResponse:
     """Answer a question over the corpus, grounded in retrieved sources."""
     _check_rate_limit(http_request)
-    answer = engine.query(session, sanitize_query(request.query))
+    answer = engine.query(session, sanitize_query(request.query), collection=request.folder)
     return _to_response(answer)
+
+
+@router.get("/folders", response_model=list[str], tags=["folders"])
+async def list_folders(session: Session = Depends(get_db)) -> list[str]:
+    """The distinct folders documents have been ingested into (for the UI/extension)."""
+    from scholarrag.db import repository as repo
+
+    return repo.list_collections(session)
 
 
 def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:
@@ -121,7 +131,9 @@ async def query_stream(
     _check_rate_limit(http_request)
 
     def event_gen() -> Iterator[str]:
-        chunks, tokens = engine.stream(session, sanitize_query(request.query))
+        chunks, tokens = engine.stream(
+            session, sanitize_query(request.query), collection=request.folder
+        )
         collected: list[str] = []
         for token in tokens:
             collected.append(token)

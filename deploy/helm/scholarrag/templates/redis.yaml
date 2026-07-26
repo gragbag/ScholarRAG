@@ -1,0 +1,58 @@
+# ═══ WORKED EXAMPLE — study THIS to do the api exercise (api.yaml) ═══════════
+# This is 11-redis.yaml from Step 2, "Helm-ified". Compare them side by side to
+# see exactly what templatizing means:
+#   - hardcoded labels        ->  the shared "scholarrag.labels" helper (+ inline component)
+#   - hardcoded resources map  ->  a toYaml of .Values.redis.resources, re-indented
+#   - the service name stays "redis" so in-cluster DNS (redis:6379) is unchanged.
+# toYaml renders a whole values sub-tree as YAML; nindent 12 indents it to fit.
+# (Template syntax lives only in the real YAML below — never in these "#" lines,
+# since Helm executes comments too.)
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  # Selector labels are INLINE and minimal (name + component) — they must be
+  # stable and a subset of the pod labels below, so a Service reliably finds its
+  # pods. (Never put version-y labels in a selector — they'd change on upgrade.)
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/component: redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    {{- include "scholarrag.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "scholarrag.labels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
