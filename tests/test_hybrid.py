@@ -32,7 +32,13 @@ class StubRetriever:
         self._hits = hits
 
     def retrieve(
-        self, session: Session, query: str, *, top_k: int = 10, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        *,
+        top_k: int = 10,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         return self._hits[:top_k]
 

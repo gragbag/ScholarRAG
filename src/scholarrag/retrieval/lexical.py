@@ -9,6 +9,8 @@ docs/DESIGN.md.)
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,7 @@ class LexicalRetriever:
         *,
         top_k: int = 10,
         collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         "Return the ``top_k`` chunks whose text best matches the query terms."
 
@@ -38,16 +41,11 @@ class LexicalRetriever:
             .where(Chunk.fts.op("@@")(tsquery))
         )
 
-        # ── YOUR TURN (Phase 8, Step 1 — lexical folder scoping) ──────────────
-        # The query already JOINs Document, so its `collection` column is in
-        # scope. When `collection` is set, add a WHERE so only that folder's
-        # chunks match; when None, leave the query searching all folders:
-        #   if collection is not None:
-        #       stmt = stmt.where(Document.collection == collection)
-        # Target test: tests/test_retrieval_scoping.py. See EXERCISES.md → Phase 8.
-
         if collection is not None:
             stmt = stmt.where(Document.collection == collection)
+
+        if user_id is not None:
+            stmt = stmt.where(Document.user_id == user_id)
 
         stmt = stmt.order_by(rank.desc()).limit(top_k)
 

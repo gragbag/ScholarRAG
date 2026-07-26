@@ -36,3 +36,15 @@ def get_current_user(request: Request, session: Session = Depends(get_db)) -> Us
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
     return user
+
+
+def get_current_user_optional(request: Request, session: Session = Depends(get_db)) -> User | None:
+    """Resolve the user IF a token is present, else ``None`` (anonymous access).
+
+    Ingest/query allow anonymous callers (the local seed + curl demo). But a token
+    that IS supplied must still be valid — a bad token is an error, not a silent
+    downgrade to anonymous, so we reuse the strict path when a header is present.
+    """
+    if not request.headers.get("Authorization"):
+        return None
+    return get_current_user(request, session)

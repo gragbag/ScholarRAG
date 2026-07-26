@@ -7,6 +7,7 @@ raise. The two skipped tests are the Step 1 exercise targets.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 import pytest
@@ -151,7 +152,13 @@ def test_hybrid_emits_manual_spans(monkeypatch: pytest.MonkeyPatch) -> None:
 
     class _Stub:
         def retrieve(
-            self, session: Session, query: str, *, top_k: int = 10, collection: str | None = None
+            self,
+            session: Session,
+            query: str,
+            *,
+            top_k: int = 10,
+            collection: str | None = None,
+            user_id: uuid.UUID | None = None,
         ) -> list[RetrievedChunk]:
             return []
 

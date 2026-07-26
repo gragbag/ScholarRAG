@@ -49,9 +49,11 @@ class Retriever(Protocol):
         *,
         top_k: int = 10,
         collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         """Return up to ``top_k`` chunks most relevant to ``query``, best first.
 
-        ``collection`` scopes retrieval to one folder; ``None`` searches all.
+        ``collection`` scopes to one folder; ``user_id`` scopes to one owner's
+        docs (``None`` = anonymous, which sees the public/seed corpus).
         """
         ...

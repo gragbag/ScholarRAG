@@ -35,6 +35,7 @@ def create_document(
     content_type: str,
     corpus_profile: str,
     collection: str = "default",
+    user_id: uuid.UUID | None = None,
 ) -> Document:
     """Insert a new document row in the ``queued`` state and return it."""
     document = Document(
@@ -43,6 +44,7 @@ def create_document(
         content_type=content_type,
         corpus_profile=corpus_profile,
         collection=collection,
+        user_id=user_id,
         status=IngestionStatus.queued,
     )
     session.add(document)
@@ -50,9 +52,11 @@ def create_document(
     return document
 
 
-def list_collections(session: Session) -> list[str]:
-    """Return the distinct folder names, alphabetically."""
+def list_collections(session: Session, user_id: uuid.UUID | None = None) -> list[str]:
+    """Return the distinct folder names (scoped to ``user_id`` when given)."""
     stmt = select(Document.collection).distinct().order_by(Document.collection)
+    if user_id is not None:
+        stmt = stmt.where(Document.user_id == user_id)
     return list(session.scalars(stmt).all())
 
 

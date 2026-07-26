@@ -18,11 +18,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from scholarrag.api.deps import get_db, get_query_engine
+from scholarrag.auth.deps import get_current_user_optional
+from scholarrag.db.models import User
 from scholarrag.generation import cited_sources
 from scholarrag.generation.base import Answer
 from scholarrag.guardrails import sanitize_query
 from scholarrag.pipeline import AnyQueryEngine
 from scholarrag.retrieval.base import RetrievedChunk
+
+
+def _owner_id(user: User | None) -> uuid.UUID | None:
+    """The scope key: an authenticated user sees their own docs; None = anonymous."""
+    return user.id if user is not None else None
+
 
 router = APIRouter(tags=["query"])
 
@@ -82,19 +90,28 @@ async def query_documents(
     http_request: Request,
     session: Session = Depends(get_db),
     engine: AnyQueryEngine = Depends(get_query_engine),
+    user: User | None = Depends(get_current_user_optional),
 ) -> QueryResponse:
     """Answer a question over the corpus, grounded in retrieved sources."""
     _check_rate_limit(http_request)
-    answer = engine.query(session, sanitize_query(request.query), collection=request.folder)
+    answer = engine.query(
+        session,
+        sanitize_query(request.query),
+        collection=request.folder,
+        user_id=_owner_id(user),
+    )
     return _to_response(answer)
 
 
 @router.get("/folders", response_model=list[str], tags=["folders"])
-async def list_folders(session: Session = Depends(get_db)) -> list[str]:
-    """The distinct folders documents have been ingested into (for the UI/extension)."""
+async def list_folders(
+    session: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+) -> list[str]:
+    """The caller's folders (their own if authenticated, else the public/seed ones)."""
     from scholarrag.db import repository as repo
 
-    return repo.list_collections(session)
+    return repo.list_collections(session, user_id=_owner_id(user))
 
 
 def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:
@@ -117,6 +134,7 @@ async def query_stream(
     http_request: Request,
     session: Session = Depends(get_db),
     engine: AnyQueryEngine = Depends(get_query_engine),
+    user: User | None = Depends(get_current_user_optional),
 ) -> StreamingResponse:
     """Stream the grounded answer token-by-token as SSE, then emit the cited sources.
 
@@ -132,7 +150,10 @@ async def query_stream(
 
     def event_gen() -> Iterator[str]:
         chunks, tokens = engine.stream(
-            session, sanitize_query(request.query), collection=request.folder
+            session,
+            sanitize_query(request.query),
+            collection=request.folder,
+            user_id=_owner_id(user),
         )
         collected: list[str] = []
         for token in tokens:

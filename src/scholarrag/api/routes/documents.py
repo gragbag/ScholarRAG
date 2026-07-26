@@ -15,10 +15,11 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from scholarrag.api.deps import Enqueuer, get_db, get_enqueuer, get_pipeline
+from scholarrag.auth.deps import get_current_user_optional
 from scholarrag.config import get_settings
 from scholarrag.corpus import get_corpus_profile
 from scholarrag.db import repository as repo
-from scholarrag.db.models import Document, IngestionStatus
+from scholarrag.db.models import Document, IngestionStatus, User
 from scholarrag.ingestion import IngestionPipeline, UnsupportedFileTypeError
 from scholarrag.ingestion.fetch import FetchError, fetch_url
 
@@ -74,6 +75,7 @@ def _register_and_enqueue(
     data: bytes,
     filename: str,
     folder: str,
+    user: User | None,
 ) -> UploadResponse:
     """Register bytes into ``folder`` + enqueue ingestion — shared by every ingest route."""
     if len(data) > MAX_UPLOAD_BYTES:
@@ -84,7 +86,12 @@ def _register_and_enqueue(
     profile = get_corpus_profile(get_settings().corpus_profile)
     try:
         registration = pipeline.register(
-            session, data=data, filename=filename, profile=profile, collection=folder
+            session,
+            data=data,
+            filename=filename,
+            profile=profile,
+            collection=folder,
+            user_id=user.id if user is not None else None,
         )
     except UnsupportedFileTypeError as exc:
         raise HTTPException(
@@ -108,11 +115,18 @@ async def upload_document(
     session: Session = Depends(get_db),
     pipeline: IngestionPipeline = Depends(get_pipeline),
     enqueue: Enqueuer = Depends(get_enqueuer),
+    user: User | None = Depends(get_current_user_optional),
 ) -> UploadResponse:
     """Accept a file, register it into ``folder``, and enqueue background ingestion."""
     data = await file.read()
     return _register_and_enqueue(
-        session, pipeline, enqueue, data=data, filename=file.filename or "upload", folder=folder
+        session,
+        pipeline,
+        enqueue,
+        data=data,
+        filename=file.filename or "upload",
+        folder=folder,
+        user=user,
     )
 
 
@@ -122,6 +136,7 @@ async def ingest_text(
     session: Session = Depends(get_db),
     pipeline: IngestionPipeline = Depends(get_pipeline),
     enqueue: Enqueuer = Depends(get_enqueuer),
+    user: User | None = Depends(get_current_user_optional),
 ) -> UploadResponse:
     """Ingest already-clean text (the extension extracted it client-side)."""
     # `.txt` => the plain-text path (no re-extraction — the text is already clean).
@@ -132,6 +147,7 @@ async def ingest_text(
         data=body.text.encode("utf-8"),
         filename=f"{body.title}.txt",
         folder=body.folder,
+        user=user,
     )
 
 
@@ -141,6 +157,7 @@ async def ingest_url(
     session: Session = Depends(get_db),
     pipeline: IngestionPipeline = Depends(get_pipeline),
     enqueue: Enqueuer = Depends(get_enqueuer),
+    user: User | None = Depends(get_current_user_optional),
 ) -> UploadResponse:
     """Fetch a URL server-side, then ingest it (PDF pipeline, or readable-HTML)."""
     try:
@@ -150,7 +167,7 @@ async def ingest_url(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"could not fetch url: {exc}"
         ) from exc
     return _register_and_enqueue(
-        session, pipeline, enqueue, data=data, filename=filename, folder=body.folder
+        session, pipeline, enqueue, data=data, filename=filename, folder=body.folder, user=user
     )
 
 

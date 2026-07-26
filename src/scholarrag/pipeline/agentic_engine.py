@@ -21,6 +21,7 @@ ungrounded answer.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -58,6 +59,7 @@ class AgentState(TypedDict):
     question: str  # the user's original question — never mutated
     query: str  # the CURRENT retrieval query (rewritten on retries)
     collection: str | None  # folder scope (None = all folders)
+    user_id: uuid.UUID | None  # owner scope (None = anonymous / public corpus)
     session: Any  # the request's DB session (no checkpointer in Step 1)
     chunks: list[RetrievedChunk]  # latest retrieval results
     verdict: str  # grader's call: "relevant" | "weak"
@@ -91,7 +93,11 @@ class AgenticQueryEngine:
     def _node_retrieve(self, state: AgentState) -> dict[str, Any]:
         """Hybrid retrieval on the *current* query (which retries may rewrite)."""
         chunks = self._retriever.retrieve(
-            state["session"], state["query"], top_k=self._top_k, collection=state["collection"]
+            state["session"],
+            state["query"],
+            top_k=self._top_k,
+            collection=state["collection"],
+            user_id=state["user_id"],
         )
         return {"chunks": chunks}
 
@@ -199,12 +205,19 @@ class AgenticQueryEngine:
 
     # ── public surface (scaffolded — mirrors the other engines) ──────────────
 
-    def _run(self, session: Session, question: str, collection: str | None = None) -> AgentState:
+    def _run(
+        self,
+        session: Session,
+        question: str,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> AgentState:
         """Invoke the graph from a fresh state."""
         state: AgentState = {
             "question": question,
             "query": question,  # first retrieval uses the question as-is
             "collection": collection,
+            "user_id": user_id,
             "session": session,
             "chunks": [],
             "verdict": "",
@@ -220,14 +233,21 @@ class AgenticQueryEngine:
         sources = [chunks[n - 1] for n in cited if 1 <= n <= len(chunks)]
         return enforce_grounding(Answer(text=text, sources=sources))
 
-    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
-        cache = self._cache if collection is None else None
+    def query(
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> Answer:
+        cache = self._cache if (collection is None and user_id is None) else None
         if cache is not None:
             hit = cache.get(query)
             if hit is not None:
                 return hit
 
-        final = self._run(session, query, collection=collection)
+        final = self._run(session, query, collection=collection, user_id=user_id)
         answer = self._to_answer(final["answer"], final["chunks"])
         if cache is not None:
             cache.put(query, answer)
@@ -240,7 +260,12 @@ class AgenticQueryEngine:
         return self._to_answer(final["answer"], final["chunks"]), final["chunks"]
 
     def stream(
-        self, session: Session, query: str, *, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         """Buffer-then-stream: the loop runs to completion, then tokens replay.
 
@@ -248,7 +273,7 @@ class AgenticQueryEngine:
         path's streamed output is FULLY GATED (the answer is checked before any
         token leaves). True per-node event streaming is the Step 2 upgrade.
         """
-        final = self._run(session, query, collection=collection)
+        final = self._run(session, query, collection=collection, user_id=user_id)
         answer = self._to_answer(final["answer"], final["chunks"])
 
         def _replay(text: str) -> Iterator[str]:

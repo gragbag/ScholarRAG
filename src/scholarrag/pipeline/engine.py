@@ -8,6 +8,7 @@ answer (Step 4). ``QueryEngine.query`` is the public entry point the API calls.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 
 from sqlalchemy.orm import Session
@@ -43,28 +44,41 @@ class QueryEngine:
 
     @observe(name="retrieve")
     def _retrieve(
-        self, session: Session, query: str, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         """Rewrite -> retrieve per query -> fuse across queries (the retrieval half)."""
         queries = self._rewriter.rewrite(query) if self._multi_query else [query]
         result_lists = [
-            self._retriever.retrieve(session, q, top_k=self._top_k, collection=collection)
+            self._retriever.retrieve(
+                session, q, top_k=self._top_k, collection=collection, user_id=user_id
+            )
             for q in queries
         ]
         return reciprocal_rank_fusion(result_lists, top_k=self._top_k)
 
     @observe(name="query")
-    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
+    def query(
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> Answer:
         "Run the full RAG pipeline for ``query`` and return a grounded answer."
-        # Cache only the unscoped path — a folder-scoped query must not read/write
-        # the shared cache (same text, different folder = different answer).
-        cache = self._cache if collection is None else None
+        # Cache only the fully-unscoped path — a folder- or user-scoped query must
+        # not read/write the shared cache (same text, different scope = different answer).
+        cache = self._cache if (collection is None and user_id is None) else None
         if cache is not None:
             hit = cache.get(query)
             if hit is not None:
                 return hit
 
-        fused = self._retrieve(session, query, collection=collection)
+        fused = self._retrieve(session, query, collection=collection, user_id=user_id)
         answer = self._answerer.answer(query, fused)
         if cache is not None:
             cache.put(query, answer)
@@ -79,12 +93,17 @@ class QueryEngine:
         return self._answerer.answer(query, fused), fused
 
     def stream(
-        self, session: Session, query: str, *, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         """Streaming variant: retrieve synchronously, then stream the answer tokens.
 
         Returns the fused candidate chunks (so the caller can resolve citations
         once the stream finishes) plus an iterator of answer text deltas.
         """
-        fused = self._retrieve(session, query, collection=collection)
+        fused = self._retrieve(session, query, collection=collection, user_id=user_id)
         return fused, self._answerer.answer_stream(query, fused)

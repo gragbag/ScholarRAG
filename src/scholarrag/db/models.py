@@ -88,6 +88,15 @@ class Document(Base):
     # one collection. `corpus_profile` selects chunking behaviour; `collection`
     # groups documents — different concerns, so it's a separate column.
     collection: Mapped[str] = mapped_column(String(64), default="default", index=True)
+    # The owner. NULL = public/seed corpus (visible to anonymous requests);
+    # a user id = private to that user. Authenticated retrieval filters on it.
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
     status: Mapped[IngestionStatus] = mapped_column(
         SAEnum(
             IngestionStatus,

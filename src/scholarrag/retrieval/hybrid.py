@@ -12,6 +12,8 @@ retriever — it just happens to be smarter inside.
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy.orm import Session
 
 from scholarrag.observability import get_tracer
@@ -45,18 +47,19 @@ class HybridRetriever:
         *,
         top_k: int = 10,
         collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         "Retrieve, fuse, and (optionally) rerank — best ``top_k`` chunks first."
         tracer = get_tracer("scholarrag.retrieval")
 
         with tracer.start_as_current_span("retrieve.dense"):
             dense_hits = self._dense.retrieve(
-                session, query, top_k=self._candidate_k, collection=collection
+                session, query, top_k=self._candidate_k, collection=collection, user_id=user_id
             )
 
         with tracer.start_as_current_span("retrieve.lexical"):
             lexical_hits = self._lexical.retrieve(
-                session, query, top_k=self._candidate_k, collection=collection
+                session, query, top_k=self._candidate_k, collection=collection, user_id=user_id
             )
 
         fused = reciprocal_rank_fusion(

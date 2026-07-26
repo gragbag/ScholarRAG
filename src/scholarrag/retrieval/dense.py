@@ -30,11 +30,15 @@ class DenseRetriever:
         *,
         top_k: int = 10,
         collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         "Embed the query and return the ``top_k`` nearest chunks."
         vector = self._embedder.embed_query(query)
 
         metadata_filter: Metadata | None = {"collection": collection} if collection else None
+
+        if user_id is not None:
+            metadata_filter = {**(metadata_filter or {}), "owner": str(user_id)}
 
         matches = self._vector_store.query(vector, top_k=top_k, filter=metadata_filter)
 

@@ -34,7 +34,7 @@ from scholarrag.embeddings.base import Embedder, Vector
 from scholarrag.ingestion.chunk import TextChunk, chunk_text
 from scholarrag.ingestion.hashing import content_hash
 from scholarrag.ingestion.parse import detect_content_type, extract_text
-from scholarrag.vectorstore.base import VectorRecord, VectorStore
+from scholarrag.vectorstore.base import Metadata, VectorRecord, VectorStore
 
 
 class TransientIngestionError(Exception):
@@ -78,6 +78,7 @@ class IngestionPipeline:
         filename: str,
         profile: CorpusProfile,
         collection: str = "default",
+        user_id: uuid.UUID | None = None,
     ) -> RegisterResult:
         """Create a ``queued`` document + store its bytes (idempotent by hash).
 
@@ -97,6 +98,7 @@ class IngestionPipeline:
             content_type=content_type,
             corpus_profile=profile.name,
             collection=collection,
+            user_id=user_id,
         )
         document.raw_content = data  # stored so a worker can fetch it later
         session.flush()
@@ -125,7 +127,12 @@ class IngestionPipeline:
             chunks = chunk_text(text, profile)
             embeddings = self._embedder.embed_documents([c.text for c in chunks]) if chunks else []
             records, new_chunks = self._build_records(
-                document_id, document.filename, document.collection, chunks, embeddings
+                document_id,
+                document.filename,
+                document.collection,
+                document.user_id,
+                chunks,
+                embeddings,
             )
             self._vector_store.upsert(records)
             repo.add_chunks(session, document_id, new_chunks)
@@ -152,10 +159,16 @@ class IngestionPipeline:
         filename: str,
         profile: CorpusProfile,
         collection: str = "default",
+        user_id: uuid.UUID | None = None,
     ) -> IngestResult:
         """Synchronous end-to-end ingest (register + process)."""
         registration = self.register(
-            session, data=data, filename=filename, profile=profile, collection=collection
+            session,
+            data=data,
+            filename=filename,
+            profile=profile,
+            collection=collection,
+            user_id=user_id,
         )
         document = registration.document
         if not registration.created:
@@ -176,6 +189,7 @@ class IngestionPipeline:
         document_id: uuid.UUID,
         filename: str,
         collection: str,
+        user_id: uuid.UUID | None,
         chunks: list[TextChunk],
         embeddings: list[Vector],
     ) -> tuple[list[VectorRecord], list[NewChunk]]:
@@ -184,17 +198,18 @@ class IngestionPipeline:
         new_chunks = []
         for chunk, embedding in zip(chunks, embeddings, strict=True):
             vector_id = f"{document_id}:{chunk.index}"
-            record = VectorRecord(
-                id=vector_id,
-                values=embedding,
-                metadata={
-                    "text": chunk.text,
-                    "document_id": str(document_id),
-                    "chunk_index": chunk.index,
-                    "filename": filename,
-                    "collection": collection,  # lets dense retrieval scope by folder
-                },
-            )
+            metadata: Metadata = {
+                "text": chunk.text,
+                "document_id": str(document_id),
+                "chunk_index": chunk.index,
+                "filename": filename,
+                "collection": collection,  # dense retrieval scopes by folder
+            }
+            # Tag the owner only for user docs; public/seed docs stay unowned, so
+            # anonymous retrieval (no owner filter) still finds them.
+            if user_id is not None:
+                metadata["owner"] = str(user_id)
+            record = VectorRecord(id=vector_id, values=embedding, metadata=metadata)
             new_chunk = NewChunk(
                 chunk_index=chunk.index,
                 text=chunk.text,

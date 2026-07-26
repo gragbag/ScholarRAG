@@ -17,6 +17,7 @@ LangChain imports stay inside methods (``langchain`` extra, absent in CI).
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -98,10 +99,16 @@ class LangChainQueryEngine:
         return prompt | self._llm | StrOutputParser()
 
     def _retrieve(
-        self, session: Session, query: str, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> list[RetrievedChunk]:
         """Hand-rolled retrieval, identical to the other pipeline (by design)."""
-        return self._retriever.retrieve(session, query, top_k=self._top_k, collection=collection)
+        return self._retriever.retrieve(
+            session, query, top_k=self._top_k, collection=collection, user_id=user_id
+        )
 
     def _to_answer(self, text: str, chunks: list[RetrievedChunk]) -> Answer:
         "Chain output (a string) -> gated :class:`Answer`."
@@ -113,15 +120,22 @@ class LangChainQueryEngine:
 
     # ── public surface (scaffolded — mirrors QueryEngine) ────────────────────
 
-    def query(self, session: Session, query: str, *, collection: str | None = None) -> Answer:
+    def query(
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
+    ) -> Answer:
         """Cache-aside -> retrieve -> LCEL chain -> gated Answer."""
-        cache = self._cache if collection is None else None
+        cache = self._cache if (collection is None and user_id is None) else None
         if cache is not None:
             hit = cache.get(query)
             if hit is not None:
                 return hit
 
-        chunks = self._retrieve(session, query, collection=collection)
+        chunks = self._retrieve(session, query, collection=collection, user_id=user_id)
         text = self._chain.invoke({"context": format_sources(chunks), "question": query})
         answer = self._to_answer(text, chunks)
         if cache is not None:
@@ -137,11 +151,16 @@ class LangChainQueryEngine:
         return self._to_answer(text, chunks), chunks
 
     def stream(
-        self, session: Session, query: str, *, collection: str | None = None
+        self,
+        session: Session,
+        query: str,
+        *,
+        collection: str | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> tuple[list[RetrievedChunk], Iterator[str]]:
         "Streaming variant — LCEL's freebie."
 
-        chunks = self._retrieve(session, query, collection=collection)
+        chunks = self._retrieve(session, query, collection=collection, user_id=user_id)
 
         tokens = self._chain.stream({"context": format_sources(chunks), "question": query})
 

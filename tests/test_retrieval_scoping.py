@@ -22,7 +22,14 @@ from scholarrag.vectorstore.local import LocalVectorStore
 DIM = 8
 
 
-def _doc(session: Session, *, filename: str, digest: str, collection: str) -> uuid.UUID:
+def _doc(
+    session: Session,
+    *,
+    filename: str,
+    digest: str,
+    collection: str = "default",
+    user_id: uuid.UUID | None = None,
+) -> uuid.UUID:
     doc = repo.create_document(
         session,
         filename=filename,
@@ -30,9 +37,28 @@ def _doc(session: Session, *, filename: str, digest: str, collection: str) -> uu
         content_type="txt",
         corpus_profile="research_papers",
         collection=collection,
+        user_id=user_id,
     )
     session.flush()
     return doc.id
+
+
+def _owned_record(
+    embedder: FakeEmbedder, doc_id: uuid.UUID, filename: str, owner: str
+) -> VectorRecord:
+    (vec,) = embedder.embed_documents([filename])
+    return VectorRecord(
+        id=f"{doc_id}:0",
+        values=vec,
+        metadata={
+            "text": filename,
+            "document_id": str(doc_id),
+            "chunk_index": 0,
+            "filename": filename,
+            "collection": "default",
+            "owner": owner,
+        },
+    )
 
 
 # ── passes now: the collection plumbing ──────────────────────────────────────
@@ -104,3 +130,50 @@ def test_lexical_scoping(db: Session) -> None:
 
     unscoped = retriever.retrieve(db, "quantum", top_k=10)
     assert {h.filename for h in unscoped} == {"a.txt", "b.txt"}  # None = all folders
+
+
+# ── Exercise B — per-user (owner) scoping ────────────────────────────────────
+def test_dense_owner_scoping(db: Session) -> None:
+    embedder = FakeEmbedder(dim=DIM)
+    store = LocalVectorStore(dim=DIM)
+    ua, ub = uuid.uuid4(), uuid.uuid4()
+    da, db_id = uuid.uuid4(), uuid.uuid4()
+    store.upsert(
+        [
+            _owned_record(embedder, da, "a.txt", str(ua)),
+            _owned_record(embedder, db_id, "b.txt", str(ub)),
+        ]
+    )
+    retriever = DenseRetriever(embedder=embedder, vector_store=store)
+
+    scoped = retriever.retrieve(db, "anything", top_k=10, user_id=ua)
+    assert {h.filename for h in scoped} == {"a.txt"}  # only user A's docs
+
+    anon = retriever.retrieve(db, "anything", top_k=10)  # None = anonymous sees all
+    assert {h.filename for h in anon} == {"a.txt", "b.txt"}
+
+
+def test_lexical_owner_scoping(db: Session) -> None:
+    ua = repo.upsert_user(db, google_sub="ua", email="a@x.com")
+    ub = repo.upsert_user(db, google_sub="ub", email="b@x.com")
+    db.flush()
+    doc_a = _doc(db, filename="a.txt", digest="o-a", user_id=ua.id)
+    doc_b = _doc(db, filename="b.txt", digest="o-b", user_id=ub.id)
+    repo.add_chunks(
+        db,
+        doc_a,
+        [NewChunk(chunk_index=0, text="quantum computing", vector_id=f"{doc_a}:0", char_count=17)],
+    )
+    repo.add_chunks(
+        db,
+        doc_b,
+        [NewChunk(chunk_index=0, text="quantum mechanics", vector_id=f"{doc_b}:0", char_count=17)],
+    )
+    db.flush()
+    retriever = LexicalRetriever()
+
+    scoped = retriever.retrieve(db, "quantum", top_k=10, user_id=ua.id)
+    assert {h.filename for h in scoped} == {"a.txt"}  # only user A's docs
+
+    anon = retriever.retrieve(db, "quantum", top_k=10)  # anonymous sees all
+    assert {h.filename for h in anon} == {"a.txt", "b.txt"}

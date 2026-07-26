@@ -116,7 +116,13 @@ def test_query_engine_uses_cache() -> None:
             self.calls = 0
 
         def retrieve(
-            self, session: Session, query: str, *, top_k: int = 10, collection: str | None = None
+            self,
+            session: Session,
+            query: str,
+            *,
+            top_k: int = 10,
+            collection: str | None = None,
+            user_id: uuid.UUID | None = None,
         ) -> list[RetrievedChunk]:
             self.calls += 1
             return [_chunk("RAG grounds answers")]

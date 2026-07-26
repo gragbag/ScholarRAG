@@ -913,6 +913,25 @@ for a fetched URL.
 'content-type: application/json' -d '{"text":"...","title":"My note","folder":"papers"}'`
 then query `folder: "papers"`.
 
+## Phase 8 — Per-user scoping (owner filter)
+
+Scaffolded: `Document.user_id` (nullable) threaded through ingest (→ vector
+metadata `owner`) and all engines/retrievers; `get_current_user_optional` and the
+endpoints wire the caller's id. **Design:** authenticated → sees only their own
+docs; anonymous (no token — the seed/curl demo) → sees the public/seed corpus.
+One exercise = actually applying the owner filter (both retrievers ignore
+`user_id` until you do). Targets in `test_retrieval_scoping.py`.
+
+### Exercise B — owner filter (`retrieval/dense.py` + `retrieval/lexical.py`)
+Mirror what you did for `collection`, on the owner:
+- **dense:** when `user_id` is set, add `"owner": str(user_id)` to the metadata
+  filter (`metadata_filter = {**(metadata_filter or {}), "owner": str(user_id)}`);
+  when None, add nothing (public/seed vectors have no `owner`, so anonymous sees them).
+- **lexical:** `if user_id is not None: stmt = stmt.where(Document.user_id == user_id)`.
+
+**Targets:** `test_dense_owner_scoping`, `test_lexical_owner_scoping`.
+**Verify:** `make check`. (The dev/cluster DB needs `alembic upgrade head`.)
+
 ---
 
 ## When you're done
