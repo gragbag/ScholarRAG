@@ -60,6 +60,8 @@ services:
       # Point the app at the compose services (override .env's localhost DSNs).
       POSTGRES_DSN: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
       REDIS_URL: redis://redis:6379/0
+      # Reach the Ollama container by service name (used only when LLM_PROVIDER=ollama).
+      OLLAMA_BASE_URL: http://ollama:11434
     ports:
       - "8001:8000"
     depends_on:
@@ -82,6 +84,7 @@ services:
     environment:
       POSTGRES_DSN: postgresql+psycopg://scholarrag:scholarrag@postgres:5432/scholarrag
       REDIS_URL: redis://redis:6379/0
+      OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres:
         condition: service_healthy
@@ -148,6 +151,29 @@ services:
     volumes:
       - mlflowdata:/mlflow
 
+  # Local, free, unlimited LLM generation (LLM_PROVIDER=ollama). Opt-in via the
+  # "ollama" compose profile so the default `make up` stays lean — start it with
+  # `make ollama-up` (which also pulls the models). Models live in the `ollama`
+  # volume, so you pull them once and they persist across restarts.
+  ollama:
+    image: ollama/ollama:latest # pin to a version tag (e.g. :0.5.7) for reproducibility
+    profiles: ["ollama"]
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # GPU (optional): on a machine with an NVIDIA GPU + the container toolkit
+    # (works in WSL2 with a CUDA-enabled driver), uncomment to make generation
+    # fast. CPU-only works out of the box — just slower.
+    # gpus: all
+
 volumes:
   pgdata:
   mlflowdata:
+  ollama:

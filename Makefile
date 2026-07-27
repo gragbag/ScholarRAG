@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help migrate install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
+.PHONY: help migrate install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs ollama-up ollama-down clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -62,6 +62,17 @@ down: ## Stop the stack
 
 logs: ## Tail stack logs
 	docker compose logs -f
+
+# ── Ollama (local, free LLM — set LLM_PROVIDER=ollama) ──────────────────────
+# Pull once into the `ollama` volume; models persist across restarts. On a slow
+# CPU, drop the strong model to a smaller tag (OLLAMA_MODEL_STRONG=llama3.2:3b).
+OLLAMA_MODELS = llama3.2:3b llama3.1:8b
+ollama-up: ## Start the Ollama container + pull the models (idempotent)
+	docker compose --profile ollama up -d --wait ollama
+	@for m in $(OLLAMA_MODELS); do echo "→ pulling $$m"; docker compose exec -T ollama ollama pull $$m; done
+
+ollama-down: ## Stop the Ollama container (models stay in the volume)
+	docker compose --profile ollama stop ollama
 
 clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache build dist *.egg-info

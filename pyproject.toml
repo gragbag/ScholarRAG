@@ -179,6 +179,14 @@ module = [
 follow_imports = "skip"
 ignore_missing_imports = true
 
+# Auth extra (PyJWT + google-auth): installed locally, absent in CI. `jwt` and
+# the `google` namespace root must be ignored too — the `google.*` patterns above
+# cover submodules but not the top-level package mypy resolves first.
+[[tool.mypy.overrides]]
+module = ["jwt", "google"]
+follow_imports = "skip"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

@@ -34,7 +34,10 @@ def create_access_token(user_id: uuid.UUID, settings: Settings) -> str:
         "exp": now + timedelta(minutes=settings.jwt_expiry_minutes),  # expires
     }
 
-    return jwt.encode(payload, settings.jwt_secret, algorithm=_ALGORITHM)
+    # Bind to a typed local: with jwt treated as untyped (absent in CI), encode()
+    # returns Any, and returning Any directly would trip mypy's warn_return_any.
+    token: str = jwt.encode(payload, settings.jwt_secret, algorithm=_ALGORITHM)
+    return token
 
 
 def decode_access_token(token: str, settings: Settings) -> uuid.UUID:
