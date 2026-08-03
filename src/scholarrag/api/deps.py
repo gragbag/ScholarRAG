@@ -17,6 +17,7 @@ from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
+from scholarrag.config import get_settings
 from scholarrag.db.engine import session_scope
 from scholarrag.ingestion import IngestionPipeline
 from scholarrag.pipeline import AnyQueryEngine, build_query_engine
@@ -44,8 +45,17 @@ def enqueue_ingestion(document_id: uuid.UUID) -> None:
 
 
 def get_enqueuer() -> Enqueuer:
-    """Return the enqueue function (overridden with a spy in tests)."""
-    return enqueue_ingestion
+    """Return the enqueuer implied by ``QUEUE_BACKEND`` (a spy overrides it in tests)."""
+    backend = get_settings().queue_backend
+    if backend == "eager":
+        from scholarrag.ingestion.enqueue import EagerEnqueuer
+
+        return EagerEnqueuer()
+    if backend == "cloudtasks":
+        from scholarrag.ingestion.enqueue import CloudTasksEnqueuer
+
+        return CloudTasksEnqueuer(get_settings())
+    return enqueue_ingestion  # celery (default)
 
 
 @lru_cache

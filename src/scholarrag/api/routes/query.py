@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from scholarrag.api.deps import get_db, get_query_engine
-from scholarrag.auth.deps import get_current_user_optional
+from scholarrag.auth.deps import get_current_user, get_current_user_optional
 from scholarrag.db.models import User
 from scholarrag.generation import cited_sources
 from scholarrag.generation.base import Answer
@@ -108,10 +108,62 @@ async def list_folders(
     session: Session = Depends(get_db),
     user: User | None = Depends(get_current_user_optional),
 ) -> list[str]:
-    """The caller's folders (their own if authenticated, else the public/seed ones)."""
+    """The caller's folders: the distinct collections on their documents, unioned
+    with any empty folders they've created (the folders table)."""
     from scholarrag.db import repository as repo
 
-    return repo.list_collections(session, user_id=_owner_id(user))
+    uid = _owner_id(user)
+    names = set(repo.list_collections(session, user_id=uid))
+    if uid is not None:
+        names |= set(repo.list_user_folders(session, uid))
+    return sorted(names)
+
+
+class FolderSummary(BaseModel):
+    """A folder and how many of the caller's documents live in it."""
+
+    name: str
+    count: int
+
+
+@router.get("/folders/summary", response_model=list[FolderSummary], tags=["folders"])
+async def list_folder_summaries(
+    session: Session = Depends(get_db),
+    user: User | None = Depends(get_current_user_optional),
+) -> list[FolderSummary]:
+    """The caller's folders, each with its document count (for the folder chips).
+    Empty folders they've created show up with a count of 0."""
+    from scholarrag.db import repository as repo
+
+    uid = _owner_id(user)
+    counts = dict(repo.folder_summaries(session, user_id=uid))  # folders that have docs
+    if uid is not None:
+        for name in repo.list_user_folders(session, uid):
+            counts.setdefault(name, 0)  # created-but-empty folders → 0
+    return [FolderSummary(name=name, count=count) for name, count in sorted(counts.items())]
+
+
+class CreateFolderRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+
+
+@router.post(
+    "/folders",
+    response_model=FolderSummary,
+    status_code=status.HTTP_201_CREATED,
+    tags=["folders"],
+)
+async def create_folder(
+    body: CreateFolderRequest,
+    session: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> FolderSummary:
+    """Create (or return the existing) folder for the signed-in user. Requires auth
+    — folders are owned, so there's no anonymous/public create."""
+    from scholarrag.db import repository as repo
+
+    folder = repo.create_folder(session, user_id=user.id, name=body.name)
+    return FolderSummary(name=folder.name, count=0)
 
 
 def _source_dict(chunk: RetrievedChunk) -> dict[str, object]:

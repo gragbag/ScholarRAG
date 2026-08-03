@@ -20,12 +20,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # "fake" = deterministic, dependency-free LLM client used in tests/CI.
 LLMProvider = Literal["anthropic", "gemini", "openai", "ollama", "fake"]
 # "fake" = deterministic, dependency-free embedder used in tests/CI.
-EmbeddingProvider = Literal["local", "fake", "openai"]
-VectorStoreKind = Literal["auto", "local", "pinecone"]
+EmbeddingProvider = Literal["local", "fake", "openai", "modal"]
+VectorStoreKind = Literal["auto", "local", "pinecone", "pgvector"]
 # "none" = fusion only (no rerank); "fake" = deterministic torch-free reranker.
 RerankerProvider = Literal["cross_encoder", "fake", "none"]
 # Which query-pipeline implementation serves /query (A/B'd via the eval harness).
 PipelineKind = Literal["handrolled", "langchain", "agentic"]
+# How a registered document gets handed off for background processing:
+#   celery     — Redis broker + Celery worker (default; needs `make worker`)
+#   eager      — process in-process, no separate worker (local-dev convenience)
+#   cloudtasks — Google Cloud Tasks push -> POST /internal/ingest (serverless deploy)
+QueueBackend = Literal["celery", "eager", "cloudtasks"]
 
 
 class Settings(BaseSettings):
@@ -73,6 +78,15 @@ class Settings(BaseSettings):
     # 429s, so GeminiLLM backs off and retries this many times before giving up.
     gemini_max_retries: int = 6
     openai_api_key: str | None = None
+    # OpenAI-compatible endpoint. None -> OpenAI's own host; point it at a free
+    # hosted provider that speaks the same API (all set their own model ids/key):
+    #   Groq       https://api.groq.com/openai/v1
+    #   OpenRouter https://openrouter.ai/api/v1
+    #   Together   https://api.together.xyz/v1
+    #   DeepSeek   https://api.deepseek.com
+    openai_base_url: str | None = None
+    openai_model_cheap: str = "gpt-4o-mini"
+    openai_model_strong: str = "gpt-4o"
     ollama_base_url: str = "http://localhost:11434"
     # Ollama model tags (LLM_PROVIDER=ollama). Pull them first, e.g.
     # `ollama pull llama3.2:3b`. Cheap = query rewriting/classification; strong =
@@ -84,6 +98,14 @@ class Settings(BaseSettings):
     embedding_provider: EmbeddingProvider = "local"
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     embedding_dim: int = 384
+    # EMBEDDING_PROVIDER=modal runs BGE on Modal (deploy/modal/embed_app.py) so the
+    # backend carries no torch. Point the URL at the deployed web endpoint; the
+    # token is the shared secret the endpoint checks (see the app's EMBED_TOKEN).
+    modal_embed_url: str | None = None
+    modal_embed_token: str | None = None
+    # Generous so a Modal COLD START (container boot + model load, or the first
+    # invocation pulling the image) doesn't time out; warm calls are sub-second.
+    modal_embed_timeout: float = 120.0
 
     # -- Vector store --------------------------------------------------------
     # "auto" -> Pinecone when PINECONE_API_KEY is set, else LocalVectorStore.
@@ -153,6 +175,17 @@ class Settings(BaseSettings):
     # the standard container ports (postgres:5432 / redis:6379).
     postgres_dsn: str = "postgresql+psycopg://scholarrag:scholarrag@localhost:5433/scholarrag"
     redis_url: str = "redis://localhost:6380/0"
+
+    # -- Ingestion queue -----------------------------------------------------
+    queue_backend: QueueBackend = "celery"
+    # Cloud Tasks (queue_backend=cloudtasks): a GCP push queue that POSTs each job
+    # to this service's /internal/ingest endpoint. All set at deploy time.
+    gcp_project: str | None = None
+    gcp_location: str = "us-central1"
+    cloud_tasks_queue: str = "ingestion"
+    cloud_tasks_max_attempts: int = 5  # dead-letter after this many delivery attempts
+    internal_ingest_url: str | None = None  # public URL of THIS service + "/internal/ingest"
+    internal_secret: str | None = None  # shared secret the enqueuer sends + the route checks
 
     # -- Corpus --------------------------------------------------------------
     # Selects a profile in scholarrag.corpus (domain is swappable).

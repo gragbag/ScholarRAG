@@ -15,7 +15,7 @@ from dataclasses import dataclass
 import pytest
 
 from scholarrag.config import Settings
-from scholarrag.llm import AnthropicLLM, FakeLLM, GeminiLLM, LLMClient, OllamaLLM
+from scholarrag.llm import AnthropicLLM, FakeLLM, GeminiLLM, LLMClient, OllamaLLM, OpenAILLM
 
 
 def _settings() -> Settings:
@@ -29,6 +29,8 @@ def _settings() -> Settings:
         gemini_model_strong="flash-x",
         ollama_model_cheap="llama-x",
         ollama_model_strong="qwen-x",
+        openai_model_cheap="oai-cheap-x",
+        openai_model_strong="oai-strong-x",
     )
 
 
@@ -37,6 +39,7 @@ def test_clients_conform_to_protocol() -> None:
     assert isinstance(AnthropicLLM(_settings(), create_fn=lambda **kw: None), LLMClient)
     assert isinstance(GeminiLLM(_settings(), generate_fn=lambda **kw: None), LLMClient)
     assert isinstance(OllamaLLM(_settings()), LLMClient)
+    assert isinstance(OpenAILLM(_settings(), create_fn=lambda **kw: None), LLMClient)
 
 
 def test_fake_llm_scripts_and_records_calls() -> None:
@@ -211,3 +214,80 @@ def test_ollama_stream_yields_deltas() -> None:
 
     llm = OllamaLLM(_settings(), stream_fn=fake_stream)
     assert "".join(llm.stream("Q", tier="cheap")) == "hello"
+
+
+# ── OpenAI-compatible provider (Groq / OpenRouter / Together / DeepSeek) ──────
+# Minimal stubs mimicking the OpenAI SDK's chat.completions response shape.
+@dataclass
+class _OAIMessage:
+    content: str | None
+
+
+@dataclass
+class _OAIChoice:
+    message: _OAIMessage
+
+
+@dataclass
+class _OAIUsage:
+    prompt_tokens: int
+    completion_tokens: int
+
+
+@dataclass
+class _OAIResponse:
+    choices: list[_OAIChoice]
+    usage: _OAIUsage | None = None
+
+
+@dataclass
+class _OAIDelta:
+    content: str | None
+
+
+@dataclass
+class _OAIStreamChoice:
+    delta: _OAIDelta
+
+
+@dataclass
+class _OAIChunk:
+    choices: list[_OAIStreamChoice]
+
+
+def test_openai_complete_maps_tier_and_extracts_text() -> None:
+    seen: dict[str, object] = {}
+
+    def fake_create(**kwargs: object) -> _OAIResponse:
+        seen.update(kwargs)
+        return _OAIResponse(
+            choices=[_OAIChoice(_OAIMessage("grounded openai answer"))],
+            usage=_OAIUsage(prompt_tokens=10, completion_tokens=20),
+        )
+
+    llm = OpenAILLM(_settings(), create_fn=fake_create)
+    out = llm.complete("Q", system="be brief", tier="strong", max_tokens=42)
+
+    assert out == "grounded openai answer"
+    assert seen["model"] == "oai-strong-x"  # strong tier -> strong model
+    assert seen["max_tokens"] == 42
+    assert seen["messages"][0] == {"role": "system", "content": "be brief"}  # type: ignore[index]
+    assert seen["messages"][-1] == {"role": "user", "content": "Q"}  # type: ignore[index]
+
+
+def test_openai_stream_uses_injected_stream_fn() -> None:
+    seen: dict[str, object] = {}
+
+    def fake_stream(**kwargs: object) -> list[_OAIChunk]:
+        seen.update(kwargs)
+        # A None-content delta must be skipped, not yielded.
+        return [
+            _OAIChunk([_OAIStreamChoice(_OAIDelta("hel"))]),
+            _OAIChunk([_OAIStreamChoice(_OAIDelta(None))]),
+            _OAIChunk([_OAIStreamChoice(_OAIDelta("lo"))]),
+        ]
+
+    llm = OpenAILLM(_settings(), stream_fn=fake_stream)
+    assert "".join(llm.stream("Q", tier="cheap")) == "hello"
+    assert seen["model"] == "oai-cheap-x"  # cheap tier -> cheap model
+    assert seen["stream"] is True

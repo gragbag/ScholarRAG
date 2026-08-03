@@ -11,10 +11,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from scholarrag.db.models import Chunk, Document, IngestionStatus, User
+from scholarrag.db.models import Chunk, Document, Folder, IngestionStatus, User
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +60,46 @@ def list_collections(session: Session, user_id: uuid.UUID | None = None) -> list
     return list(session.scalars(stmt).all())
 
 
+def folder_summaries(session: Session, user_id: uuid.UUID | None = None) -> list[tuple[str, int]]:
+    "Return each folder with its document count, as ``(name, count)`` pairs."
+
+    stmt = (
+        select(Document.collection, func.count(Document.id))
+        .group_by(Document.collection)
+        .order_by(Document.collection)
+    )
+
+    if user_id is not None:
+        stmt = stmt.where(Document.user_id == user_id)
+
+    rows = session.execute(stmt).all()
+    return [(name, count) for name, count in rows]
+
+
+def list_user_folders(session: Session, user_id: uuid.UUID) -> list[str]:
+    """Names of folders a user has explicitly created (rows in the folders table).
+
+    Distinct from ``list_collections``, which only surfaces folders that already
+    contain a document. The route unions the two so empty folders show up too.
+    """
+    stmt = select(Folder.name).where(Folder.user_id == user_id).order_by(Folder.name)
+    return list(session.scalars(stmt).all())
+
+
+def create_folder(session: Session, *, user_id: uuid.UUID, name: str) -> Folder:
+    "Register a folder for a user, returning it. Idempotent: the same"
+    folder_search = select(Folder).where(Folder.user_id == user_id, Folder.name == name)
+    found = session.scalars(folder_search).first()
+    if found:
+        return found
+
+    new_folder = Folder(user_id=user_id, name=name)
+    session.add(new_folder)
+    session.flush()
+
+    return new_folder
+
+
 def upsert_user(session: Session, *, google_sub: str, email: str, name: str | None = None) -> User:
     """Return the user for ``google_sub``, creating them on first sign-in."""
     user = session.scalars(select(User).where(User.google_sub == google_sub)).first()
@@ -84,9 +124,28 @@ def get_document(session: Session, document_id: uuid.UUID) -> Document | None:
     return session.get(Document, document_id)
 
 
-def get_document_by_hash(session: Session, content_hash: str) -> Document | None:
-    """Idempotency lookup: has a document with these exact bytes been seen?"""
-    stmt = select(Document).where(Document.content_hash == content_hash)
+def get_document_by_hash(
+    session: Session,
+    content_hash: str,
+    *,
+    user_id: uuid.UUID | None = None,
+    collection: str = "default",
+) -> Document | None:
+    """Idempotency lookup, scoped to one owner + folder: have these exact bytes
+    already been added by this user to this collection?
+
+    Scoping matters now that the same paper can live in different folders / belong
+    to different users — and a user's own copy is separate from the public seed
+    corpus (``user_id`` NULL). The defaults reproduce the old seed behaviour.
+    """
+    stmt = select(Document).where(
+        Document.content_hash == content_hash,
+        Document.collection == collection,
+    )
+    if user_id is None:
+        stmt = stmt.where(Document.user_id.is_(None))
+    else:
+        stmt = stmt.where(Document.user_id == user_id)
     return session.scalars(stmt).one_or_none()
 
 
@@ -145,10 +204,53 @@ def count_chunks(session: Session, document_id: uuid.UUID) -> int:
 def list_documents(
     session: Session,
     *,
+    collection: str | None = None,
+    user_id: uuid.UUID | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> list[Document]:
-    "Return documents newest-first, paginated by ``limit`` / ``offset``."
-    stmt = select(Document).order_by(Document.created_at.desc()).limit(limit).offset(offset)
-    documents = list(session.scalars(stmt).all())
-    return documents
+    """Return documents newest-first, paginated by ``limit`` / ``offset``.
+
+    Optionally scoped to a ``collection`` (folder) and/or ``user_id`` (owner) —
+    the folder view in the extension passes both so a user sees only their own
+    pages in the selected folder.
+    """
+    stmt = select(Document).order_by(Document.created_at.desc())
+    if collection is not None:
+        stmt = stmt.where(Document.collection == collection)
+    if user_id is not None:
+        stmt = stmt.where(Document.user_id == user_id)
+    stmt = stmt.limit(limit).offset(offset)
+    return list(session.scalars(stmt).all())
+
+
+def document_vector_ids(session: Session, document_id: uuid.UUID) -> list[str]:
+    """The vector-store ids of a document's chunks — needed to purge them from the
+    vector store when the document is deleted (the DB rows cascade; vectors don't)."""
+    stmt = select(Chunk.vector_id).where(Chunk.document_id == document_id)
+    return list(session.scalars(stmt).all())
+
+
+def rename_document(
+    session: Session, document_id: uuid.UUID, *, user_id: uuid.UUID | None, title: str
+) -> Document | None:
+    """Rename a document (its display ``filename``), scoped to the owner. Returns the
+    updated document, or None if it doesn't exist or isn't the caller's."""
+    document = session.get(Document, document_id)
+    if document is None or document.user_id != user_id:
+        return None
+    document.filename = title
+    session.flush()
+    return document
+
+
+def delete_document(session: Session, document_id: uuid.UUID, *, user_id: uuid.UUID | None) -> bool:
+    "Delete a document (its chunks cascade in the DB), scoped to the owner. Returns"
+
+    document = session.get(Document, document_id)
+    if document is None or document.user_id != user_id:
+        return False
+
+    session.delete(document)
+    session.flush()
+    return True

@@ -67,6 +67,9 @@ def db_engine() -> Iterator[Engine]:
         engine.dispose()
         pytest.skip("Postgres not reachable — start it: docker compose up -d postgres")
     Base.metadata.drop_all(engine)
+    with engine.begin() as conn:
+        # The Embedding model's vector(384) column needs the pgvector extension.
+        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
     yield engine
     Base.metadata.drop_all(engine)

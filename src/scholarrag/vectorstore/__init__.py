@@ -37,6 +37,13 @@ def build_vector_store(settings: Settings | None = None) -> VectorStore:
     selected/available, so importing this never requires cloud credentials.
     """
     settings = settings or get_settings()
+    if settings.vector_store == "pgvector":
+        # Consolidated store: vectors in Postgres via pgvector. Lazy imports keep
+        # this out of the import path when another backend is selected.
+        from scholarrag.db.engine import create_db_engine
+        from scholarrag.vectorstore.pgvector import PgVectorStore
+
+        return PgVectorStore(create_db_engine(settings), dim=settings.embedding_dim)
     if settings.use_pinecone:
         # Imported lazily so the pinecone SDK is only needed when actually used.
         from scholarrag.vectorstore.pinecone import PineconeVectorStore

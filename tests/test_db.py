@@ -24,6 +24,8 @@ def _make_doc(
     *,
     filename: str = "paper.pdf",
     content_hash: str | None = None,
+    collection: str = "default",
+    user_id: uuid.UUID | None = None,
 ) -> Document:
     return repo.create_document(
         session,
@@ -31,6 +33,8 @@ def _make_doc(
         content_hash=content_hash or uuid.uuid4().hex,
         content_type="pdf",
         corpus_profile="research_papers",
+        collection=collection,
+        user_id=user_id,
     )
 
 
@@ -53,10 +57,23 @@ def test_get_document_by_hash(db: Session) -> None:
     assert repo.get_document_by_hash(db, "does-not-exist") is None
 
 
-def test_duplicate_content_hash_rejected(db: Session) -> None:
-    _make_doc(db, content_hash="dup")
+def test_duplicate_content_hash_rejected_within_owner_folder(db: Session) -> None:
+    alice = repo.upsert_user(db, google_sub="dup-sub", email="dup@example.com")
+    db.flush()
+    _make_doc(db, content_hash="dup", collection="research", user_id=alice.id)
+    # Same bytes, same owner, same folder → rejected by uq_documents_owner_collection_hash.
     with pytest.raises(IntegrityError):
-        _make_doc(db, content_hash="dup")
+        _make_doc(db, content_hash="dup", collection="research", user_id=alice.id)
+
+
+def test_same_hash_allowed_across_folders(db: Session) -> None:
+    alice = repo.upsert_user(db, google_sub="af-sub", email="af@example.com")
+    db.flush()
+    a = _make_doc(db, content_hash="shared", collection="research", user_id=alice.id)
+    # Same bytes, different folder → allowed: a paper can live in two folders, and
+    # a user's copy is separate from the public seed corpus's copy.
+    b = _make_doc(db, content_hash="shared", collection="ml", user_id=alice.id)
+    assert a.id != b.id
 
 
 def test_set_document_status(db: Session) -> None:
@@ -116,3 +133,52 @@ def test_list_documents(db: Session) -> None:
     assert len(limited) == 2
     # newest-first: created_at should be non-increasing
     assert all(limited[i].created_at >= limited[i + 1].created_at for i in range(len(limited) - 1))
+
+
+def test_folder_summaries_groups_and_scopes(db: Session) -> None:
+    alice = repo.upsert_user(db, google_sub="sub-alice", email="alice@example.com")
+    bob = repo.upsert_user(db, google_sub="sub-bob", email="bob@example.com")
+    db.flush()
+
+    # Alice: 2 docs in "research", 1 in "ml". Bob: 1 in "research" (must NOT count).
+    _make_doc(db, collection="research", user_id=alice.id)
+    _make_doc(db, collection="research", user_id=alice.id)
+    _make_doc(db, collection="ml", user_id=alice.id)
+    _make_doc(db, collection="research", user_id=bob.id)
+
+    summaries = repo.folder_summaries(db, user_id=alice.id)
+
+    # Grouped + counted, scoped to Alice, ordered by folder name.
+    assert summaries == [("ml", 1), ("research", 2)]
+    assert dict(summaries) == {"ml": 1, "research": 2}
+
+
+def test_create_folder_is_idempotent_per_user(db: Session) -> None:
+    alice = repo.upsert_user(db, google_sub="sub-alice", email="alice@example.com")
+    bob = repo.upsert_user(db, google_sub="sub-bob", email="bob@example.com")
+    db.flush()
+
+    f1 = repo.create_folder(db, user_id=alice.id, name="research")
+    f2 = repo.create_folder(db, user_id=alice.id, name="research")  # same name → same row
+    assert f1.id == f2.id
+
+    # Different user, same name → a separate folder (uniqueness is per user).
+    fb = repo.create_folder(db, user_id=bob.id, name="research")
+    assert fb.id != f1.id
+
+    assert repo.list_user_folders(db, alice.id) == ["research"]
+
+
+def test_delete_document_is_owner_scoped(db: Session) -> None:
+    alice = repo.upsert_user(db, google_sub="del-a", email="a@example.com")
+    bob = repo.upsert_user(db, google_sub="del-b", email="b@example.com")
+    db.flush()
+    doc = _make_doc(db, collection="research", user_id=alice.id)
+
+    # Bob can't delete Alice's document.
+    assert repo.delete_document(db, doc.id, user_id=bob.id) is False
+    assert repo.get_document(db, doc.id) is not None
+
+    # Alice can — and it's really gone.
+    assert repo.delete_document(db, doc.id, user_id=alice.id) is True
+    assert repo.get_document(db, doc.id) is None

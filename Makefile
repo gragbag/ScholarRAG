@@ -2,7 +2,7 @@
 # Everything runs through `uv` so the environment is pinned and hermetic.
 
 .DEFAULT_GOAL := help
-.PHONY: help migrate install lint fmt type test check run seed eval eval-gen eval-rag eval-agentic up down logs ollama-up ollama-down clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
+.PHONY: help migrate backfill-embeddings install lint fmt type test check run worker seed eval eval-gen eval-rag eval-agentic up up-app down logs ollama-up ollama-down modal-deploy clean ui cluster-up cluster-down k8s-image k8s-secret k8s-deploy k8s-status k8s-seed helm-lint helm-template helm-deploy helm-uninstall tf-init tf-validate tf-plan tf-apply tf-destroy
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -33,6 +33,9 @@ run: ## Run the API locally with autoreload (port 8001 to avoid conflicts)
 	# installed; a bare `uv run` re-syncs to core deps and uninstalls them.
 	uv run --all-extras uvicorn --factory scholarrag.api.main:create_app --reload --host 0.0.0.0 --port 8001
 
+worker: ## Run the Celery ingestion worker from source (current code — no image rebuild)
+	uv run --all-extras celery -A scholarrag.workers.celery_app worker -l info --concurrency 2
+
 ui: ## Launch the Streamlit chat UI (needs the API running — `make run` — in another terminal)
 	uv run --all-extras streamlit run src/scholarrag/ui/app.py
 
@@ -41,6 +44,9 @@ migrate: ## Apply DB schema migrations (alembic upgrade head)
 
 seed: ## Ingest the sample corpus (synchronous; needs Postgres + the embeddings extra)
 	uv run --all-extras python -m scholarrag.scripts.seed
+
+backfill-embeddings: ## Re-embed existing chunks into the vector store (after switching to pgvector)
+	uv run --all-extras python -m scholarrag.scripts.backfill_embeddings
 
 eval: ## Run retrieval eval over the golden set (needs Postgres + a seeded corpus)
 	uv run --all-extras python -m scholarrag.scripts.eval
@@ -54,11 +60,14 @@ eval-rag: ## Generation eval with RAGAS + MLflow (needs seeded corpus; spends fr
 eval-agentic: ## Agentic vs single-shot on the hard set (both pipelines; slow, rate-limited)
 	uv run --all-extras python -m scholarrag.scripts.eval_agentic
 
-up: ## Boot the full stack (API, Postgres, Redis, Langfuse, MLflow)
-	docker compose up -d --build
+up: ## Boot backing infra only (Postgres, Redis, Langfuse, Jaeger, MLflow) — run the app from source
+	docker compose up -d
+
+up-app: ## Boot the FULL dockerized stack incl. api/worker/ui containers (not for active dev)
+	docker compose --profile app up -d --build
 
 down: ## Stop the stack
-	docker compose down
+	docker compose --profile app down
 
 logs: ## Tail stack logs
 	docker compose logs -f
@@ -73,6 +82,11 @@ ollama-up: ## Start the Ollama container + pull the models (idempotent)
 
 ollama-down: ## Stop the Ollama container (models stay in the volume)
 	docker compose --profile ollama stop ollama
+
+# ── Modal (Phase C: serverless embeddings) ──────────────────────────────────
+# First: `modal setup` (auth) and `modal secret create scholarrag-embed EMBED_TOKEN=...`.
+modal-deploy: ## Deploy the BGE embedding service to Modal (prints the endpoint URL)
+	uv run --extra modal modal deploy deploy/modal/embed_app.py
 
 clean: ## Remove caches and build artifacts
 	rm -rf .pytest_cache .mypy_cache .ruff_cache build dist *.egg-info

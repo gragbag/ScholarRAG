@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from sqlalchemy.engine import Engine
 
 from scholarrag.config import Settings
 from scholarrag.vectorstore import (
@@ -13,6 +14,7 @@ from scholarrag.vectorstore import (
     VectorStore,
     build_vector_store,
 )
+from scholarrag.vectorstore.pgvector import PgVectorStore
 
 
 @pytest.fixture
@@ -110,3 +112,62 @@ def test_delete_all(store: LocalVectorStore) -> None:
 def test_build_vector_store_defaults_to_local() -> None:
     settings = Settings(vector_store="auto", pinecone_api_key=None, embedding_dim=3)
     assert isinstance(build_vector_store(settings), LocalVectorStore)
+
+
+# ── PgVectorStore (consolidated pgvector backend) ────────────────────────────
+# These need a real Postgres with pgvector. The shared db_engine fixture creates
+# the extension + embeddings table and skips if Postgres is unreachable. Writes
+# commit (not savepoint-isolated), so the fixture wipes the table first.
+_DIM = 384
+
+
+def _onehot(index: int) -> list[float]:
+    """A 384-dim one-hot vector (matches the embeddings.embedding column dim)."""
+    v = [0.0] * _DIM
+    v[index] = 1.0
+    return v
+
+
+@pytest.fixture
+def pg_store(db_engine: Engine) -> PgVectorStore:
+    store = PgVectorStore(db_engine, dim=_DIM)
+    store.delete(delete_all=True)  # clean slate
+    return store
+
+
+def test_pgvector_satisfies_protocol(pg_store: PgVectorStore) -> None:
+    assert isinstance(pg_store, VectorStore)
+
+
+def test_pgvector_upsert_count_fetch_delete(pg_store: PgVectorStore) -> None:
+    written = pg_store.upsert(
+        [
+            VectorRecord(id="a", values=_onehot(0), metadata={"collection": "x"}),
+            VectorRecord(id="b", values=_onehot(1), metadata={"collection": "y"}),
+        ]
+    )
+    assert written == 2
+    assert pg_store.count() == 2
+    assert pg_store.fetch("a") == {"collection": "x"}
+    assert pg_store.fetch("missing") is None
+
+    assert pg_store.delete(["a"]) == 1
+    assert pg_store.count() == 1
+
+
+def test_pgvector_query_knn_and_filter(pg_store: PgVectorStore) -> None:
+    pg_store.upsert(
+        [
+            VectorRecord(id="a", values=_onehot(0), metadata={"collection": "x"}),
+            VectorRecord(id="b", values=_onehot(1), metadata={"collection": "y"}),
+        ]
+    )
+    # Nearest to the one-hot-0 vector is "a" (cosine sim 1.0 vs 0.0).
+    matches = pg_store.query(_onehot(0), top_k=2)
+    assert [m.id for m in matches] == ["a", "b"]
+    assert matches[0].score > matches[1].score
+    assert matches[0].metadata == {"collection": "x"}
+
+    # Metadata containment filter restricts to a folder.
+    filtered = pg_store.query(_onehot(0), top_k=5, filter={"collection": "y"})
+    assert [m.id for m in filtered] == ["b"]

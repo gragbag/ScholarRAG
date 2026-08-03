@@ -34,11 +34,12 @@ dependencies = [
     # Phase 2: the production vector store (serverless, free Starter tier). Only
     # used when PINECONE_API_KEY is set; CI falls back to LocalVectorStore.
     "pinecone>=5.0",
+    "pgvector>=0.3",
 ]
 
 [project.optional-dependencies]
 # Populated in later phases; declared now so the layering is visible.
-llm = ["anthropic>=0.40", "google-genai>=1.0"]
+llm = ["anthropic>=0.40", "google-genai>=1.0", "openai>=1.0"]
 # Local embeddings pull in torch (large). Kept OUT of core so tests/CI stay fast
 # — they use the dependency-free FakeEmbedder. `make install` (--all-extras)
 # installs this for real embeddings locally.
@@ -74,6 +75,12 @@ ui = ["streamlit>=1.40,<2"]
 auth = ["pyjwt>=2.9", "google-auth>=2.30"]
 # Phase 8: server-side readable-text extraction from fetched HTML pages.
 html = ["trafilatura>=1.8"]
+# Phase C (deploy): the Modal client/CLI to deploy + run the embedding service in
+# deploy/modal/. NOT a backend runtime dep — the app calls Modal over plain HTTP.
+modal = ["modal>=0.64"]
+# Phase D (deploy): Cloud Tasks push queue (QUEUE_BACKEND=cloudtasks). Only the
+# API needs it, to enqueue; the /internal/ingest route runs the work.
+cloudtasks = ["google-cloud-tasks>=2.16"]
 # Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
 # adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
 eval = [
@@ -155,7 +162,7 @@ ignore_missing_imports = true
 # CrossEncoder.predict) are noisy and they're installed only locally, not in CI —
 # treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
-module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*"]
+module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*", "pgvector.*", "openai.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 
@@ -174,6 +181,7 @@ module = [
     "streamlit.*",
     "google.auth.*",
     "google.oauth2.*",
+    "google.cloud.*",
     "trafilatura.*",
 ]
 follow_imports = "skip"

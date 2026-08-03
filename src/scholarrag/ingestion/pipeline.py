@@ -86,7 +86,7 @@ class IngestionPipeline:
         were already registered — so the caller knows not to enqueue again.
         """
         digest = content_hash(data)
-        existing = self._find_existing(session, digest)
+        existing = self._find_existing(session, digest, collection=collection, user_id=user_id)
         if existing is not None:
             return RegisterResult(document=existing, created=False)
 
@@ -180,9 +180,36 @@ class IngestionPipeline:
             )
         return self.process(session, document.id)
 
-    def _find_existing(self, session: Session, digest: str) -> Document | None:
-        """Idempotency lookup — has a file with this exact hash been ingested?"""
-        return repo.get_document_by_hash(session, digest)
+    def delete_document(
+        self, session: Session, document_id: uuid.UUID, *, user_id: uuid.UUID | None
+    ) -> bool:
+        """Delete a document, its chunks (DB cascade), AND its vectors (store). Scoped
+        to the owner via the repository. Returns True if it was deleted.
+
+        Order matters: gather the vector ids first, delete the row (owner-scoped),
+        commit, then purge the vectors — so an unauthorized delete never touches the
+        store, and the DB is durable before the external side effect.
+        """
+        vector_ids = repo.document_vector_ids(session, document_id)
+        deleted = repo.delete_document(session, document_id, user_id=user_id)
+        if deleted:
+            session.commit()
+            if vector_ids:
+                self._vector_store.delete(ids=vector_ids)
+        return deleted
+
+    def _find_existing(
+        self,
+        session: Session,
+        digest: str,
+        *,
+        collection: str = "default",
+        user_id: uuid.UUID | None = None,
+    ) -> Document | None:
+        """Idempotency lookup — has THIS user already ingested these exact bytes
+        into THIS folder? (Scoped so the same paper can live in two folders, and a
+        user's copy is separate from the public seed corpus.)"""
+        return repo.get_document_by_hash(session, digest, user_id=user_id, collection=collection)
 
     def _build_records(
         self,

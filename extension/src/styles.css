@@ -45,6 +45,143 @@ button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.link {
+  background: transparent;
+  color: inherit;
+  opacity: 0.55;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+.link:hover {
+  opacity: 1;
+}
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+  margin-bottom: 6px;
+}
+.folders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+/* A folder pill. `button` above makes it indigo; we override to a subtle chip. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.chip--active {
+  background: #4f46e5;
+  color: #fff;
+  border-color: #4f46e5;
+}
+.chip__count {
+  font-size: 10px;
+  min-width: 14px;
+  text-align: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+.chip--active .chip__count {
+  background: rgba(255, 255, 255, 0.25);
+}
+.chip--new {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.8;
+}
+.chip--new-input {
+  width: 96px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+/* A full-width secondary (outline) button, distinct from the indigo Ask/Sign-in. */
+.add {
+  width: 100%;
+  background: transparent;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.add:hover {
+  background: color-mix(in srgb, currentColor 8%, transparent);
+}
+.name-box {
+  margin-bottom: 6px;
+}
+.docs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0 4px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+.doc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.doc__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.doc__name:hover {
+  text-decoration: underline dotted;
+}
+.doc__edit {
+  flex: 1;
+  padding: 2px 6px;
+  font-size: 12px;
+}
+.doc__status {
+  flex: none;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.6;
+}
+.doc__del {
+  flex: none;
+  background: transparent;
+  color: inherit;
+  opacity: 0.5;
+  padding: 0 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+.doc__del:hover {
+  opacity: 1;
+  color: #dc2626;
+}
+.doc__status--completed {
+  color: #16a34a;
+  opacity: 1;
+}
+.doc__status--failed {
+  color: #dc2626;
+  opacity: 1;
+}
 .status {
   font-size: 12px;
   opacity: 0.75;

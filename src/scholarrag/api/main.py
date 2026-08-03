@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from scholarrag import __version__
 from scholarrag.api.middleware import correlation_id_middleware
-from scholarrag.api.routes import auth, documents, query
+from scholarrag.api.routes import auth, documents, internal, query
 from scholarrag.config import Settings, get_settings
 from scholarrag.corpus import available_profiles, get_corpus_profile
 from scholarrag.guardrails import build_rate_limiter
@@ -180,6 +180,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(documents.router)
+    app.include_router(internal.router)
     app.include_router(query.router)
     return app
 

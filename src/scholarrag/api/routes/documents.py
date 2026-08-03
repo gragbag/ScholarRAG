@@ -9,13 +9,14 @@ immediately with ``202 Accepted`` + the id. Clients then poll ``GET
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from scholarrag.api.deps import Enqueuer, get_db, get_enqueuer, get_pipeline
-from scholarrag.auth.deps import get_current_user_optional
+from scholarrag.auth.deps import get_current_user, get_current_user_optional
 from scholarrag.config import get_settings
 from scholarrag.corpus import get_corpus_profile
 from scholarrag.db import repository as repo
@@ -65,6 +66,9 @@ class UrlIngestRequest(BaseModel):
 
     url: str = Field(min_length=1, max_length=2048)
     folder: str = Field(default="default", max_length=64)
+    # Optional display name. Without it, the name is the URL's last path segment
+    # (e.g. "2603.10277v2" for arXiv) — so the extension lets the user set it.
+    title: str | None = Field(default=None, max_length=256)
 
 
 def _register_and_enqueue(
@@ -166,6 +170,10 @@ async def ingest_url(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY, detail=f"could not fetch url: {exc}"
         ) from exc
+    if body.title:
+        # Keep the sniffed extension (.pdf/.html) so content-type detection — which
+        # decides how to parse — still works; the user's title is just the base name.
+        filename = body.title + Path(filename).suffix
     return _register_and_enqueue(
         session, pipeline, enqueue, data=data, filename=filename, folder=body.folder, user=user
     )
@@ -174,11 +182,20 @@ async def ingest_url(
 @router.get("", response_model=list[DocumentResponse])
 async def list_documents(
     session: Session = Depends(get_db),
+    folder: str | None = None,
     limit: int = 50,
     offset: int = 0,
+    user: User | None = Depends(get_current_user_optional),
 ) -> list[DocumentResponse]:
-    """List documents, newest first."""
-    documents = repo.list_documents(session, limit=limit, offset=offset)
+    """List documents newest-first, optionally scoped to a ``folder`` and to the
+    caller (so a signed-in user sees only their own pages in that folder)."""
+    documents = repo.list_documents(
+        session,
+        collection=folder,
+        user_id=user.id if user is not None else None,
+        limit=limit,
+        offset=offset,
+    )
     return [_to_response(d) for d in documents]
 
 
@@ -196,3 +213,37 @@ async def get_document(
         )
 
     return _to_response(document)
+
+
+class RenameRequest(BaseModel):
+    """New display name for a document."""
+
+    title: str = Field(min_length=1, max_length=256)
+
+
+@router.patch("/{document_id}", response_model=DocumentResponse)
+async def rename_document(
+    document_id: uuid.UUID,
+    body: RenameRequest,
+    session: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> DocumentResponse:
+    """Rename one of the caller's documents. 404 if it isn't theirs."""
+    document = repo.rename_document(session, document_id, user_id=user.id, title=body.title)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")
+    return _to_response(document)
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: uuid.UUID,
+    session: Session = Depends(get_db),
+    pipeline: IngestionPipeline = Depends(get_pipeline),
+    user: User = Depends(get_current_user),
+) -> None:
+    """Delete one of the caller's documents — its chunks (DB) and vectors (store).
+    404 if it isn't theirs."""
+    deleted = pipeline.delete_document(session, document_id, user_id=user.id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document not found")

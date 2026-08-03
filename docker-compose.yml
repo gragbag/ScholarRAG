@@ -18,7 +18,10 @@ name: scholarrag
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector-enabled Postgres 16 (same PG major as before, so the existing
+    # pgdata volume is compatible). Powers the consolidated vector store — a
+    # migration runs CREATE EXTENSION vector. Neon/Supabase ship pgvector too.
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_USER: scholarrag
@@ -47,6 +50,11 @@ services:
       retries: 10
 
   api:
+    # App tier is OPT-IN: `make up` starts infra only (postgres/redis/…), and you
+    # run the app FROM SOURCE (make run / make worker / make ui) so code changes
+    # take effect without rebuilding the image. Start the containers with
+    # `docker compose --profile app up -d` if you want the full dockerized stack.
+    profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -73,6 +81,8 @@ services:
   worker:
     # Same image/env as the API — it just runs the Celery worker instead of
     # uvicorn. Consumes ingestion tasks from Redis and runs the pipeline.
+    # Opt-in (see api): in dev, run `make worker` from source instead.
+    profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile
@@ -94,6 +104,8 @@ services:
   ui:
     # Same image as api/worker — ONE image, THREE roles. Here it overrides the
     # image's default CMD (uvicorn) to run Streamlit instead.
+    # Opt-in (see api): in dev, run `make ui` from source instead.
+    profiles: ["app"]
     build:
       context: .
       dockerfile: Dockerfile

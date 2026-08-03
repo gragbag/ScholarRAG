@@ -19,6 +19,7 @@ from scholarrag.llm.base import LLMClient, LLMError, ModelTier
 from scholarrag.llm.fake import FakeLLM
 from scholarrag.llm.gemini import GeminiLLM
 from scholarrag.llm.ollama import OllamaLLM
+from scholarrag.llm.openai import OpenAILLM
 
 __all__ = [
     "AnthropicLLM",
@@ -28,6 +29,7 @@ __all__ = [
     "LLMError",
     "ModelTier",
     "OllamaLLM",
+    "OpenAILLM",
     "build_llm_client",
 ]
 
@@ -44,5 +46,6 @@ def build_llm_client(settings: Settings | None = None) -> LLMClient:
         return GeminiLLM(settings)
     if provider == "ollama":
         return OllamaLLM(settings)
-    # openai — wired in a later phase.
+    if provider == "openai":
+        return OpenAILLM(settings)
     raise ValueError(f"unsupported LLM provider: {provider!r}")
