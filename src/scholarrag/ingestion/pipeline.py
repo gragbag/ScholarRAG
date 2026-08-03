@@ -26,6 +26,8 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from scholarrag.blobstore.base import BlobStore
+from scholarrag.blobstore.memory import MemoryBlobStore
 from scholarrag.corpus import CorpusProfile, get_corpus_profile
 from scholarrag.db import repository as repo
 from scholarrag.db.models import Document, IngestionStatus
@@ -66,9 +68,17 @@ class RegisterResult:
 class IngestionPipeline:
     """Orchestrates ingestion. Holds the long-lived embedder + vector store."""
 
-    def __init__(self, *, embedder: Embedder, vector_store: VectorStore) -> None:
+    def __init__(
+        self,
+        *,
+        embedder: Embedder,
+        vector_store: VectorStore,
+        blob_store: BlobStore | None = None,
+    ) -> None:
         self._embedder = embedder
         self._vector_store = vector_store
+        # Default to in-memory (single-process / tests); prod passes a real store.
+        self._blob_store = blob_store if blob_store is not None else MemoryBlobStore()
 
     def register(
         self,
@@ -100,7 +110,10 @@ class IngestionPipeline:
             collection=collection,
             user_id=user_id,
         )
-        document.raw_content = data  # stored so a worker can fetch it later
+        # Raw bytes go to the blob store (object storage), not Postgres; the row
+        # keeps only the key so a worker can fetch them later.
+        document.blob_key = f"documents/{document.id}"
+        self._blob_store.put(document.blob_key, data)
         session.flush()
         session.commit()
         return RegisterResult(document=document, created=True)
@@ -115,7 +128,7 @@ class IngestionPipeline:
         document = repo.get_document(session, document_id)
         if document is None:
             raise ValueError(f"document {document_id} not found")
-        if document.raw_content is None:
+        if document.blob_key is None:
             raise ValueError(f"document {document_id} has no stored content")
         profile = get_corpus_profile(document.corpus_profile)
 
@@ -123,7 +136,8 @@ class IngestionPipeline:
         session.commit()
 
         try:
-            text = extract_text(document.raw_content, document.content_type)
+            data = self._blob_store.get(document.blob_key)
+            text = extract_text(data, document.content_type)
             chunks = chunk_text(text, profile)
             embeddings = self._embedder.embed_documents([c.text for c in chunks]) if chunks else []
             records, new_chunks = self._build_records(
@@ -191,11 +205,15 @@ class IngestionPipeline:
         store, and the DB is durable before the external side effect.
         """
         vector_ids = repo.document_vector_ids(session, document_id)
+        document = repo.get_document(session, document_id)
+        blob_key = document.blob_key if document is not None else None
         deleted = repo.delete_document(session, document_id, user_id=user_id)
         if deleted:
             session.commit()
             if vector_ids:
                 self._vector_store.delete(ids=vector_ids)
+            if blob_key:
+                self._blob_store.delete(blob_key)
         return deleted
 
     def _find_existing(

@@ -17,7 +17,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 # observability. `eval` (ragas/mlflow/datasets) is dev/CI-only and deliberately
 # left out to keep the image lean. Without these, the image ModuleNotFounds at
 # query time (the "uv strips extras" gotcha, baked in).
-ARG EXTRAS="--extra llm --extra embeddings --extra langchain --extra agentic --extra ui --extra observability --extra auth --extra html"
+ARG EXTRAS="--extra llm --extra langchain --extra agentic --extra observability --extra auth --extra html --extra cloudtasks"
 
 WORKDIR /app
 
@@ -29,10 +29,6 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Now install the project.
 COPY src ./src
 COPY README.md ./
-# The sample corpus travels in the image so the in-cluster seed Job can ingest it
-# (~13 MB; a pod has no access to your local disk). Lands at /app/data/sample_corpus,
-# exactly where scripts/seed.py looks.
-COPY data/sample_corpus ./data/sample_corpus
 # Alembic migrations, so the image can create its own schema (`alembic upgrade
 # head`) — a production image should be able to migrate the DB it deploys against.
 COPY alembic.ini ./
@@ -52,9 +48,9 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 USER appuser
-EXPOSE 8000
+EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:8000/health').status_code==200 else 1)"
+    CMD python -c "import httpx,sys; sys.exit(0 if httpx.get('http://localhost:800/health').status_code==200 else 1)"
 
-CMD ["uvicorn", "--factory", "scholarrag.api.main:create_app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn --factory scholarrag.api.main:create_app --host 0.0.0.0 --port ${PORT:-8000}"]

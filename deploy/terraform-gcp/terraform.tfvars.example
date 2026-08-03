@@ -1,0 +1,16 @@
+# Copy to terraform.tfvars (gitignored) and fill in. `terraform` auto-loads it.
+gcp_project = "scholarrag-123456"
+gcp_region  = "us-central1"
+image       = "us-central1-docker.pkg.dev/scholarrag-123456/scholarrag/api:latest"
+
+api_domain           = "api.yourname.dev"
+cloudflare_zone_id   = "..."
+cloudflare_api_token = "..."
+
+postgres_dsn      = "postgresql+psycopg://user:pass@ep-xxx-pooler.neon.tech/scholarrag?sslmode=require"
+openai_api_key    = "gsk_..."            # Groq
+modal_embed_url   = "https://<you>--scholarrag-embeddings-embeddingmodel-embed.modal.run"
+modal_embed_token = "..."
+internal_secret   = "a-long-random-string"
+jwt_secret        = "another-long-random-string"
+google_client_id  = "....apps.googleusercontent.com"

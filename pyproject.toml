@@ -81,6 +81,9 @@ modal = ["modal>=0.64"]
 # Phase D (deploy): Cloud Tasks push queue (QUEUE_BACKEND=cloudtasks). Only the
 # API needs it, to enqueue; the /internal/ingest route runs the work.
 cloudtasks = ["google-cloud-tasks>=2.16"]
+# Phase E (deploy): S3-compatible blob storage (BLOB_BACKEND=s3) for raw PDFs —
+# Cloudflare R2 / AWS S3 / MinIO, all via boto3.
+s3 = ["boto3>=1.34"]
 # Generation eval (Phase 3 Step 2): RAGAS (LLM-as-judge) driven through LangChain
 # adapters, tracked in MLflow. Heavy + LLM-calling, so kept out of CI.
 eval = [
@@ -162,7 +165,7 @@ ignore_missing_imports = true
 # CrossEncoder.predict) are noisy and they're installed only locally, not in CI —
 # treat them as untyped (Any) so our thin wrappers stay clean and CI/local agree.
 [[tool.mypy.overrides]]
-module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*", "pgvector.*", "openai.*"]
+module = ["pinecone.*", "sentence_transformers.*", "anthropic.*", "google.genai.*", "pgvector.*", "openai.*", "boto3.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

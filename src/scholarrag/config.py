@@ -31,6 +31,10 @@ PipelineKind = Literal["handrolled", "langchain", "agentic"]
 #   eager      — process in-process, no separate worker (local-dev convenience)
 #   cloudtasks — Google Cloud Tasks push -> POST /internal/ingest (serverless deploy)
 QueueBackend = Literal["celery", "eager", "cloudtasks"]
+# Where raw uploaded bytes (PDFs) live — kept OUT of Postgres so the free-tier DB
+# stays lean:  memory = in-process (tests);  local = filesystem (dev);
+# s3 = S3-compatible object storage — R2 / AWS S3 / MinIO (deploy).
+BlobBackend = Literal["memory", "local", "s3"]
 
 
 class Settings(BaseSettings):
@@ -186,6 +190,18 @@ class Settings(BaseSettings):
     cloud_tasks_max_attempts: int = 5  # dead-letter after this many delivery attempts
     internal_ingest_url: str | None = None  # public URL of THIS service + "/internal/ingest"
     internal_secret: str | None = None  # shared secret the enqueuer sends + the route checks
+
+    # -- Blob storage (raw PDFs) ---------------------------------------------
+    blob_backend: BlobBackend = "local"
+    blob_local_dir: str = ".blobs"  # dev filesystem store (gitignored)
+    # S3-compatible (blob_backend=s3). endpoint_url picks the provider:
+    #   R2: https://<account-id>.r2.cloudflarestorage.com + region="auto"
+    #   AWS S3: leave endpoint None + a real region; MinIO: http://localhost:9000
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "scholarrag-blobs"
+    s3_access_key_id: str | None = None
+    s3_secret_access_key: str | None = None
+    s3_region: str = "auto"
 
     # -- Corpus --------------------------------------------------------------
     # Selects a profile in scholarrag.corpus (domain is swappable).

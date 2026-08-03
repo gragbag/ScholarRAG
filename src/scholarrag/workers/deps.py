@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from scholarrag.blobstore import build_blob_store
 from scholarrag.config import get_settings
 from scholarrag.embeddings import build_embedder
 from scholarrag.ingestion import IngestionPipeline
@@ -23,4 +24,5 @@ def get_pipeline() -> IngestionPipeline:
     return IngestionPipeline(
         embedder=build_embedder(settings),
         vector_store=build_vector_store(settings),
+        blob_store=build_blob_store(settings),
     )

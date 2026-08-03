@@ -46,3 +46,11 @@ mlruns/
 .idea/
 .vscode/
 .DS_Store
+
+# Local blob store (raw uploaded bytes; BLOB_BACKEND=local)
+.blobs/
+
+# Terraform (GCP deploy) — state + real secrets never in git
+deploy/terraform-gcp/.terraform/
+deploy/terraform-gcp/*.tfstate*
+deploy/terraform-gcp/terraform.tfvars

@@ -14,6 +14,7 @@ import uuid
 import pytest
 from sqlalchemy.orm import Session
 
+from scholarrag.blobstore import MemoryBlobStore
 from scholarrag.corpus import get_corpus_profile
 from scholarrag.db import repository as repo
 from scholarrag.db.models import IngestionStatus
@@ -86,14 +87,17 @@ def test_register_stores_bytes_then_process(db: Session) -> None:
     # The async split: register (fast, stores bytes) then process (heavy work).
     embedder = FakeEmbedder(dim=DIM)
     store = LocalVectorStore(dim=DIM)
-    pipe = IngestionPipeline(embedder=embedder, vector_store=store)
+    blob = MemoryBlobStore()
+    pipe = IngestionPipeline(embedder=embedder, vector_store=store, blob_store=blob)
     profile = get_corpus_profile("generic_docs")
     data = _doc_bytes()
 
     reg = pipe.register(db, data=data, filename="paper.txt", profile=profile)
     assert reg.created is True
     assert reg.document.status is IngestionStatus.queued
-    assert reg.document.raw_content == data  # bytes stored for the worker to fetch
+    # Bytes live in the blob store (not Postgres); the row keeps the key.
+    assert reg.document.blob_key == f"documents/{reg.document.id}"
+    assert blob.get(reg.document.blob_key) == data
 
     # Re-registering identical bytes is a no-op (won't be enqueued again).
     reg2 = pipe.register(db, data=data, filename="paper.txt", profile=profile)

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from scholarrag.blobstore import build_blob_store
 from scholarrag.cache import build_answer_cache
 from scholarrag.config import get_settings
 from scholarrag.corpus import CorpusProfile, get_corpus_profile
@@ -57,6 +58,7 @@ def main() -> None:  # pragma: no cover - manual entry point
     pipeline = IngestionPipeline(
         embedder=embedder,
         vector_store=build_vector_store(settings),
+        blob_store=build_blob_store(settings),
     )
     profile = get_corpus_profile(settings.corpus_profile)
     with session_scope() as session:
